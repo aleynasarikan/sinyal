@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# Yerel veri, seed parolası, gerçek değerlendirme setleri (kurum verisi olabilir)
+var/
+.sinyal-seed-password
+eval/gold/*.jsonl
+!eval/gold/README.md
+*.key
+*.pem
+*.crt

@@ -1,0 +1,20 @@
+{
+  "name": "sinyal",
+  "version": "0.1.0",
+  "description": "SİNYAL — bağımsız çok dilli medya istihbaratı ve olay analizi platformu (MVP)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "migrate": "bun run src/store/migrate_cli.ts",
+    "eval": "bun run src/eval/cli.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "check": "bunx tsc --noEmit && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.23",
+    "typescript": "5.9.3"
+  }
+}
