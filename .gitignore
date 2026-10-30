@@ -12,3 +12,6 @@ eval/gold/*.jsonl
 *.key
 *.pem
 *.crt
+
+# UMİ inceleme raporu: güvenlik ayrıntısı içerir, depoya dahil edilmez
+docs/UMI_REFERANS_RAPORU.md

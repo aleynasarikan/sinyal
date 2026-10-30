@@ -51,7 +51,7 @@ otomatik çalışır; elle: `bun run migrate`.
 
 ## Belgeler
 
-- `docs/UMI_REFERANS_RAPORU.md` — UMİ salt-okuma inceleme raporu
+- `docs/UMI_REFERANS_RAPORU.md` — UMİ salt-okuma inceleme raporu (yerel; depoya dahil değildir)
 - `docs/MIMARI.md` — mimari, veri modeli, eşleştirme ve sınıflandırma
 - `docs/GUVENLIK.md` — güvenlik kararları ve açık konular
 - `docs/ENTEGRASYON.md` — UMİ entegrasyonu için kontrollü hazırlık ve gereken onaylar
