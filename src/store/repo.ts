@@ -15,6 +15,8 @@ export interface ArticleFilter {
   from?: string; // ISO
   to?: string;
   novelty?: NoveltyLabel;
+  /** Yalnız yayın tarihi OLMAYAN haberler (tarih filtresinin dışarıda bıraktıklarını saymak için) */
+  undated?: boolean;
   limit: number;
   offset: number;
 }

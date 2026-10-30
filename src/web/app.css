@@ -83,7 +83,8 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .event-card { cursor: default; }
 .event-card h3 a { text-decoration: none; color: var(--text); }
 .event-card h3 a:hover { text-decoration: underline; }
-.orig { font-size: 15px; }
+.orig { font-size: 15px; unicode-bidi: isolate; }
+.quote, bdi { unicode-bidi: isolate; }
 .orig[dir="rtl"] { font-size: 16px; line-height: 1.8; }
 .compare { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .compare .card { margin: 0; }

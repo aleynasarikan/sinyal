@@ -53,7 +53,9 @@ Spesifikasyondaki 13 kavramın tamamı ayrı tablodur (`migrations/001_init.sql`
 2. **Skor** (`match.ts`): kavram (0.30), yer (0.25), kişi/kurum (0.25), sayı (0.10), aynı dilde başlık benzerliği (0.10).
    Bilgi olmayan bileşenin ağırlığı dağıtılır.
 3. **Sert kurallar** (yanlış birleştirmeyi önler): ortak kavramı olmayan iki olay türü (deprem ≠ yangın) birleşmez;
-   96 saatten uzak olaylar birleşmez; en az iki bağımsız sinyal gerekir.
+   96 saatten uzak olaylar birleşmez; **sayı dışında** en az iki bağımsız sinyal (konu, yer, kişi/kurum, başlık ≥0.3) gerekir —
+   ortak sayı skoru destekler ama tek başına kanıt sayılmaz. Taraflardan birinde konu bilgisi yoksa olay türü denetlenemez:
+   ortak kişi/kurum şartı aranır ve eşleşme `uncertain` işaretlenir (denetim 2026-10-28, bulgu 1).
 4. **Belirsizlik**: skor 0.45–0.60 veya güvenilir tarih yoksa üyelik `uncertain` işaretlenir. Her üyelik gerekçe kaydeder.
 
 **Sınırlar:** Sözlük dışı varlıklar diller arası köprü kuramaz. Gerçek veride sözlük, analist onaylı varlık listesi
@@ -62,6 +64,11 @@ ek bir sinyal olarak eklenebilir; ağırlıklar altın setle ayarlanmalıdır. U
 **aday sinyal** olarak eklenebilir; olay kimliği asla olmaz.
 
 ## Yeni gelişme sınıflandırması
+
+Yeni olgu olarak sayılan sayılar `extractFactNumbers` ile çıkarılır: saat (10:45, saat 10.45) ve tarih (28.10.2026,
+28 Ekim, October 28 vb. 7 dilde ay adları) sayıları olgu sayılmaz; yüzdeler yazım biçiminden bağımsız `N%` olarak
+normalize edilir (bulgu 3). Kaynak metni ise **aynen** saklanır (NFC/NFD, RLM/LRM, ZWNJ korunur); eşleştirme ve arama
+yalnız `matchKey` anahtarıyla yapılır (bulgu 7).
 
 Sırayla: (1) aynı dilde neredeyse aynı başlık+metin → **tekrar** (yeniden yayın); (2) olaya göre yeni sayı/varlık/yer
 hesaplanır; (3) tarih yok/tahmini/geçersiz/gelecekte ya da kaynak kayıtsız → **tarih/kaynak belirsiz** (yeni olay veya gelişme
@@ -77,6 +84,11 @@ Karar haber sayısına dayanmaz.
   iddiadaki kişi/kurum/yerler kaynak haberlerde çıkarılmış mı, sözlük dışı ad benzeri ifadeler kaynakta geçiyor mu.
 - Durumlar: `supported` (UI: "Kaynakta dayanağı bulundu"), `partially_supported`, `contradicted`, `unverified`, `no_source`.
   Bu **sözcüksel** bir denetimdir; anlamsal doğruluğu kanıtlamaz, skor üretmez.
+- Ad/unvan denetimi sözcük düzeyindedir: iddiadaki bilinen varlık sözcükleri çıkarıldıktan sonra kalan büyük harfli her
+  parça (ör. "Kestriya **Bakanı Mehmet Uydurma**") kaynak metinde ayrıca aranır (bulgu 2). Diller arası unvanlar
+  sözcüksel olarak doğrulanamadığı için bu kural temkinlidir; "doğrulanamadı" sonucu analist incelemesi gerektirir.
+- Mock sağlayıcının iddiaları kaynak cümlesini kopyaladığı için denetimi her zaman geçer; bu iddialar "MOCK — denetim anlamlı
+  değil" olarak gösterilir, `claims_supported` sayısına katılmaz.
 - Kaynaklar arası sayısal farklılık (`claims/conflicts.ts`): can kaybı gibi slotlarda farklı değerler gizlenmez;
   ≤4 saat arayla farklı değer → "çelişki", daha uzun aralık → "zaman içinde değişim".
 - Analist incelemesi (onay/düzeltme/red/not) yalnız-ekleme olarak saklanır ve denetim kaydına yazılır.

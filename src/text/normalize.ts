@@ -27,13 +27,14 @@ for (let i = 0; i < 10; i++) {
   EASTERN_DIGITS[String.fromCharCode(0x06f0 + i)] = String(i); // Farsça
 }
 
-/** Saklama için güvenli Unicode biçimi: NFC + görünmez yön/kontrol karakterlerini temizler. Harfleri değiştirmez. */
+/**
+ * Kaynak metni saklama biçimi: metin AYNEN korunur — Unicode normalizasyonu (NFC/NFD), yön işaretleri (RLM/LRM,
+ * gömme/geçersiz kılma karakterleri), ZWNJ ve baş/son boşluklar değiştirilmez. Yalnız metin olmayan C0/DEL kontrol
+ * karakterleri (sekme ve satır sonları hariç) atılır. Eşleştirme ve arama ayrı anahtarla yapılır (matchKey).
+ * Görüntülemede yön karakterlerinin taşmasını arayüz "unicode-bidi: isolate" ile sınırlar.
+ */
 export function cleanForStorage(s: string): string {
-  return String(s ?? "")
-    .normalize("NFC")
-    .replace(BIDI_CONTROLS, "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .trim();
+  return String(s ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
 }
 
 export function foldDigits(s: string): string {
@@ -99,4 +100,48 @@ export function extractNumbers(s: string): string[] {
     out.add(String(n));
   }
   return [...out];
+}
+
+// ---- Olgu sayıları (yenilik ve eşleştirme için) ----
+// Saat ve tarih bildiren sayılar olgu sayılmaz (haberin yazım biçimidir, olayın yeni bilgisi değil).
+// Yüzdeler yazım biçiminden bağımsız "N%" olarak normalize edilir: "%61" = "61%" = "61 pour cent".
+// Ek alabilen kökler (Türkçe hal ekleri, Rusça çekim): "Ekim'de", "ekimde", "октября".
+const MONTH_STEMS = [
+  "ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık",
+  "январ", "феврал", "апрел", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр",
+].join("|");
+// Tam sözcük olarak eşleşmesi gerekenler (ör. "dec" → "decided" ile, "mar" → "markets" ile karışmasın).
+const MONTH_WORDS = [
+  "january", "february", "march", "april", "june", "july", "august", "september", "october", "november", "december",
+  "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+  "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+  "januar", "februar", "märz", "juni", "juli", "oktober", "dezember", "марта", "март", "мая", "май",
+  "يناير", "فبراير", "مارس", "أبريل", "ابريل", "مايو", "يونيو", "يوليو", "أغسطس", "اغسطس", "سبتمبر", "أكتوبر", "اكتوبر", "نوفمبر", "ديسمبر",
+  "ژانویه", "فوریه", "آوریل", "ژوئن", "ژوئیه", "اوت", "سپتامبر", "اکتبر", "نوامبر", "دسامبر",
+  "فروردین", "اردیبهشت", "خرداد", "مرداد", "شهریور", "آبان", "آذر", "بهمن", "اسفند",
+].join("|");
+const MONTHS = `(?:(?:${MONTH_STEMS})\\p{L}*|(?:${MONTH_WORDS})(?![\\p{L}]))`;
+const NUM = "\\d+(?:[.,]\\d+)?";
+const DATE_PATTERNS: RegExp[] = [
+  /\b\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b/g, // 28.10.2026, 2026-10-28, 28/10/26
+  /\b\d{1,2}:\d{2}(?::\d{2})?\b/g, // 10:45
+  /(?<![\p{L}])(?:saat|at|um|à|в|ساعت|الساعة)\s*\d{1,2}[.h]\d{2}(?!\d)/giu, // saat 10.45, à 10h45
+  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th|er|\\.)?\\s+${MONTHS}`, "giu"), // 28 Ekim, 28 October
+  new RegExp(`(?<![\\p{L}])${MONTHS}\\.?\\s+\\d{1,2}(?!\\d)`, "giu"), // October 28
+  /\b\d{1,2}\s+May\b|\bMay\s+\d{1,2}(?!\d)/g, // İngilizce "May" yalnız büyük harfle (fiil "may" ile karışmasın)
+];
+const PERCENT_PATTERNS: RegExp[] = [
+  new RegExp(`(?:%|٪)\\s?(${NUM})`, "gu"),
+  new RegExp(`(${NUM})\\s?(?:%|٪|percent|per cent|pour cent|prozent|процент\\p{L}*|درصد|بالمئة|في المئة)`, "giu"),
+  new RegExp(`yüzde\\s+(${NUM})`, "giu"),
+];
+
+export function extractFactNumbers(s: string): string[] {
+  let t = foldDigits(String(s ?? "")).replace(/\u066B/g, ".").replace(/\u066C/g, ",");
+  const pct = new Set<string>();
+  for (const re of PERCENT_PATTERNS) {
+    t = t.replace(re, (_m, n: string) => { pct.add(String(Number(n.replace(",", "."))) + "%"); return " "; });
+  }
+  for (const re of DATE_PATTERNS) t = t.replace(re, " ");
+  return [...pct, ...extractNumbers(t)];
 }

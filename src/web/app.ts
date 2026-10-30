@@ -1,6 +1,8 @@
 // SİNYAL web arayüzü — bağımlılıksız TypeScript.
 // GÜVENLİK: Sunucudan gelen hiçbir metin innerHTML ile eklenmez; tüm içerik textContent ile yazılır.
 
+import { localDayBounds, pageInfo } from "./paging.ts";
+
 type Json = any; // API yanıtları sunucu tarafında şemalıdır; arayüzde yalnız gösterim için okunur.
 
 // ---------- DOM yardımcıları ----------
@@ -226,9 +228,22 @@ function filterForm(base: string, fields: HTMLElement[]): HTMLElement {
   }, fields, h("button", { type: "submit" }, "Filtrele"), h("button", { type: "button", class: "secondary", onclick: () => go(base) }, "Temizle"));
 }
 
+const PAGE_SIZE = 20;
+
+/** Önceki/sonraki sayfalama denetimi. Filtre değişince offset sıfırlanır (form yeni sorgu üretir). */
+function pager(base: string, q: URLSearchParams, total: number): HTMLElement {
+  const p = pageInfo(total, Math.max(0, Number(q.get("offset")) || 0), PAGE_SIZE);
+  const link = (o: number) => { const n = new URLSearchParams(q); if (o) n.set("offset", String(o)); else n.delete("offset"); return `${base}?${n}`; };
+  return h("nav", { class: "row", "aria-label": "Sayfalama" },
+    h("button", { class: "secondary", disabled: p.prevOffset === null, onclick: () => go(link(p.prevOffset!)) }, "← Önceki"),
+    h("span", { class: "meta" }, p.outOfRange ? `Bu sayfada sonuç yok (toplam ${total}).` : total ? `${p.from}–${p.to} / ${total}${p.isLast ? " · son sayfa" : ""}` : "0 sonuç"),
+    h("button", { class: "secondary", disabled: p.nextOffset === null, onclick: () => go(link(p.nextOffset!)) }, "Sonraki →"),
+    p.outOfRange ? h("a", { href: link(0) }, "İlk sayfaya dön") : null);
+}
+
 async function renderEvents(q: URLSearchParams) {
   await page("Olay Haritası", async () => {
-    const qs = new URLSearchParams(q);
+    const qs = new URLSearchParams(q); qs.set("limit", String(PAGE_SIZE));
     const [d, entSel] = await Promise.all([api(`/api/events?${qs}`), entityOptions(q.get("entity") ?? "")]);
     const form = filterForm("#/olaylar", [
       h("label", {}, "Arama", h("input", { name: "q", value: q.get("q") ?? "", placeholder: "Olay veya haber başlığında ara" })),
@@ -247,8 +262,8 @@ async function renderEvents(q: URLSearchParams) {
         e.novelty.unverified_claim ? badge(`${e.novelty.unverified_claim} doğrulanmamış iddia`, "warn") : null,
         e.novelty.uncertain_date_or_source ? badge(`${e.novelty.uncertain_date_or_source} tarih/kaynak belirsiz`, "bad") : null,
         e.uncertain_matches ? badge(`${e.uncertain_matches} belirsiz eşleşme`, "warn") : null,
-      ))) : [empty("Filtrelere uyan olay yok.")];
-    return h("div", {}, providerBanner(), form, h("p", { class: "meta" }, `${d.total} olay`), list);
+      ))) : [empty(d.total ? "Bu sayfada olay yok." : "Filtrelere uyan olay yok.")];
+    return h("div", {}, providerBanner(), form, h("p", { class: "meta" }, `${d.total} olay`), list, pager("#/olaylar", q, d.total));
   });
 }
 
@@ -272,7 +287,11 @@ async function renderEvent(id: string) {
       h("h2", {}, ev.title_tr, " ", badge("kural tabanlı başlık", "muted", "Gazetteer kavram ve yerlerinden üretildi; model çıktısı değildir")),
       h("div", { class: "meta" }, h("span", { class: "mono" }, ev.event_id), h("span", {}, `İlk görülme: ${fmt(ev.first_seen_at)}`), h("span", {}, `Son güncelleme: ${fmt(ev.last_updated_at)}`), h("span", {}, `${d.articles.length} haber`)));
 
+    const lastFailed = d.last_run && d.last_run.status === "error" ? d.last_run : null;
     const analysis = h("div", { class: "card" }, h("h2", {}, "Türkçe analiz"),
+      lastFailed ? h("div", { class: "banner bad", role: "alert" },
+        `Son analiz denemesi başarısız oldu (${fmt(lastFailed.started_at)}, ${lastFailed.provider}/${lastFailed.model}): ${lastFailed.error}. `,
+        d.analysis ? "Aşağıda önceki başarılı çalıştırmanın sonuçları gösteriliyor." : "Daha önce başarılı bir analiz yok.") : null,
       d.analysis
         ? h("div", {},
             h("div", { class: "meta" }, `${d.analysis.provider} / ${d.analysis.model}`, d.analysis.mock ? badge("MOCK — gerçek model sonucu değildir", "demo") : badge("Model çıktısı — analist denetimi gerekir", "warn"), `· ${fmt(d.analysis.started_at)}`, d.analysis.status === "error" ? badge("Başarısız", "bad") : null),
@@ -329,7 +348,8 @@ function claimsSection(d: Json, artLabel: (id: string) => string): HTMLElement {
   return h("div", { class: "card" }, h("h2", {}, "Kanıt ve kaynaklar (iddialar)"),
     h("p", { class: "meta" }, "“Kaynakta dayanağı bulundu”: alıntı kaynak metinde birebir geçiyor ve iddiadaki sayılar/adlar alıntılarda var. Bu sözcüksel bir denetimdir; doğruluk onayı değildir."),
     d.claims.length ? d.claims.map((c: Json) => {
-      const [label, kind] = (CLAIM[c.status] ?? [c.status, "muted"]) as [string, string];
+      // Mock iddia kaynak cümlesinin kopyasıdır: sözcüksel denetimin geçmesi doğrulama sayılmaz.
+      const [label, kind] = c.origin?.mock ? ["MOCK — denetim anlamlı değil", "demo"] : (CLAIM[c.status] ?? [c.status, "muted"]) as [string, string];
       const reviewBox = h("div");
       const reviewUi = can("review") ? (() => {
         const sel = h("select", { "aria-label": "İnceleme durumu" }, Object.entries(REVIEW).map(([k, v]) => h("option", { value: k }, v))) as HTMLSelectElement;
@@ -362,7 +382,13 @@ async function renderSearch(q: URLSearchParams) {
     h("button", { "aria-pressed": String(view === "orig"), onclick: () => { q.delete("view"); go(`#/arama?${q}`); } }, "Özgün metin"),
     h("button", { "aria-pressed": String(view === "tr"), onclick: () => { q.set("view", "tr"); go(`#/arama?${q}`); } }, "Türkçe analiz"));
   await page("Haber Arama", async () => {
-    const qs = new URLSearchParams(q); qs.delete("view");
+    const qs = new URLSearchParams(q); qs.delete("view"); qs.set("limit", String(PAGE_SIZE));
+    // Tarih seçicileri kullanıcının YEREL gününü kapsar: başlangıç günün başı, bitiş günün sonu.
+    for (const edge of ["from", "to"] as const) {
+      const v = q.get(edge);
+      const b = v ? localDayBounds(v, new Date(`${v}T12:00:00`).getTimezoneOffset()) : null;
+      if (b) qs.set(edge, b[edge]); else qs.delete(edge);
+    }
     const [d, entSel, srcs] = await Promise.all([api(`/api/articles?${qs}`), entityOptions(q.get("entity") ?? ""), api("/api/sources")]);
     const countries = [...new Set<string>(srcs.items.map((s: Json) => s.country).filter(Boolean))].sort();
     const form = filterForm("#/arama", [
@@ -384,8 +410,10 @@ async function renderSearch(q: URLSearchParams) {
            h("p", { class: "small" }, a.translation_tr ? a.translation_tr.summary : "Bu haberin Türkçe çevirisi yok; olay düzeyindeki kural tabanlı başlık gösteriliyor. Özgün metin için görünümü değiştirin.")],
       h("div", { class: "meta" }, h("strong", {}, a.source.name), a.source.country || null, `Yayın: ${fmt(a.published_at)}`,
         h("a", { href: a.url, rel: "noopener noreferrer", target: "_blank" }, "Kaynak URL ↗"),
-        a.event ? h("a", { href: `#/olay/${encodeURIComponent(a.event.event_id)}` }, `Olay: ${a.event.title_tr}`) : null))) : [empty("Filtrelere uyan haber yok.")];
-    return h("div", {}, providerBanner(), form, h("p", { class: "meta" }, `${d.total} haber`), items);
+        a.event ? h("a", { href: `#/olay/${encodeURIComponent(a.event.event_id)}` }, `Olay: ${a.event.title_tr}`) : null))) : [empty(d.total ? "Bu sayfada haber yok." : "Filtrelere uyan haber yok.")];
+    const undated = d.excluded_undated ? h("div", { class: "banner warn", role: "status" },
+      `${d.excluded_undated} haber yayın tarihi olmadığı için tarih filtresinin dışında kaldı. Görmek için tarih filtresini temizleyin.`) : null;
+    return h("div", {}, providerBanner(), form, undated, h("p", { class: "meta" }, `${d.total} haber`), items, pager("#/arama", q, d.total));
   }, toggle);
 }
 
@@ -403,8 +431,9 @@ async function renderEvidence() {
             h("td", {}, h("a", { href: `#/olay/${encodeURIComponent(e.event_id)}` }, e.title_tr)),
             h("td", {}, detail.analysis ? [detail.analysis.status === "ok" ? badge("var", "ok") : badge("hata", "bad"), detail.analysis.mock ? badge("MOCK", "demo") : null] : badge("yok", "muted")),
             h("td", {}, String(cl.length)),
-            h("td", {}, String(cl.filter((c) => c.status === "supported").length)),
-            h("td", {}, bad ? badge(String(bad), "warn") : "0"),
+            detail.analysis?.mock
+              ? h("td", { colspan: "2" }, badge("MOCK — sayılmadı", "demo", "Mock iddialar kaynak cümlesini kopyalar; denetim sonucu doğrulama değildir"))
+              : [h("td", {}, String(cl.filter((c) => c.status === "supported").length)), h("td", {}, bad ? badge(String(bad), "warn") : "0")],
             h("td", {}, String(cl.filter((c) => c.review && c.review.status !== "pending").length)),
             h("td", {}, detail.conflicts.length ? detail.conflicts.map((c: Json) => badge(c.kind === "conflict" ? "Çelişki" : "Değişim", c.kind === "conflict" ? "bad" : "info")) : "—"));
         }))));
@@ -454,7 +483,7 @@ async function renderSystem() {
         : empty("Henüz alım yok.")),
       h("div", { class: "card" }, h("h2", {}, "Model analiz çalıştırmaları"), s.analysis_runs.length ? h("table", {},
         h("thead", {}, h("tr", {}, ["Zaman", "Olay", "Model", "Durum", "Deneme", "Gecikme", "İddia (dayanaklı)"].map((t) => h("th", {}, t)))),
-        h("tbody", {}, s.analysis_runs.map((r: Json) => h("tr", {}, h("td", {}, fmt(r.started_at)), h("td", {}, h("a", { href: `#/olay/${encodeURIComponent(r.event_id)}` }, "aç")), h("td", {}, `${r.provider}/${r.model}`, r.mock ? [" ", badge("MOCK", "demo")] : null), h("td", {}, badge(r.status, r.status === "ok" ? "ok" : "bad"), r.error ? ` ${r.error}` : null), h("td", {}, String(r.attempts)), h("td", {}, `${r.latency_ms} ms`), h("td", {}, `${r.claims_total} (${r.claims_supported})`)))))
+        h("tbody", {}, s.analysis_runs.map((r: Json) => h("tr", {}, h("td", {}, fmt(r.started_at)), h("td", {}, h("a", { href: `#/olay/${encodeURIComponent(r.event_id)}` }, "aç")), h("td", {}, `${r.provider}/${r.model}`, r.mock ? [" ", badge("MOCK", "demo")] : null), h("td", {}, badge(r.status, r.status === "ok" ? "ok" : "bad"), r.error ? ` ${r.error}` : null), h("td", {}, String(r.attempts)), h("td", {}, `${r.latency_ms} ms`), h("td", {}, r.mock ? `${r.claims_total} (MOCK — sayılmadı)` : `${r.claims_total} (${r.claims_supported})`)))))
         : empty("Henüz model analizi yok.")));
   }, actions);
 }

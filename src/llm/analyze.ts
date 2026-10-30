@@ -11,6 +11,8 @@ import type { Repo } from "../store/repo.ts";
 import { SYSTEM_PROMPT, buildUserPrompt, parseJsonLoose, validateAnalysis, type AnalysisOutput, type PromptArticle } from "./prompt.ts";
 import { LlmError, type LlmProvider } from "./types.ts";
 
+export const MOCK_CLAIM_NOTE = "MOCK: iddia, kaynak cümlesinin kopyasıdır; denetimin geçmesi gerçek doğrulama değildir.";
+
 export interface AnalyzeOptions { timeoutMs: number; maxRetries: number; sendFullText: boolean; maxCharsPerArticle: number; maxArticles?: number }
 
 /** Modele gönderilecek metni sınırlar: varsayılan yalnız ilk paragraf; tam metin yalnız açıkça izin verilirse. */
@@ -101,13 +103,17 @@ export async function analyzeEvent(
   out.value.claims.forEach((c, i) => {
     const v = verifyClaim(c, ctx);
     const claim_id = stableId("clm", runId, String(i));
-    claims.push({ claim_id, event_id: eventId, text_tr: c.text_tr, status: v.status, check_notes: [...v.notes, `denetleyici: ${VERIFIER_VERSION}`], origin, analysis_run_id: runId, created_at: startedAt });
+    // Mock sağlayıcı kaynak cümlesini aynen kopyalar; sözcüksel denetim bu yüzden her zaman geçer. Bu bir doğrulama değildir.
+    const mockNote = llm.mock ? [MOCK_CLAIM_NOTE] : [];
+    claims.push({ claim_id, event_id: eventId, text_tr: c.text_tr, status: v.status, check_notes: [...mockNote, ...v.notes, `denetleyici: ${VERIFIER_VERSION}`], origin, analysis_run_id: runId, created_at: startedAt });
     for (const s of v.sources) csources.push({ claim_id, ...s });
   });
 
   const run: AnalysisRun = {
     ...base, latency_ms: Math.round(performance.now() - t0), attempts: out.attempts,
-    claims_total: claims.length, claims_supported: claims.filter((c) => c.status === "supported").length,
+    claims_total: claims.length,
+    // Mock çalıştırmada "dayanaklı" sayısı gerçek doğrulama gibi raporlanmaz.
+    claims_supported: llm.mock ? 0 : claims.filter((c) => c.status === "supported").length,
     title_tr: out.value.title_tr, summary_tr: out.value.summary_tr,
   };
   await repo.insertClaims(claims, csources);

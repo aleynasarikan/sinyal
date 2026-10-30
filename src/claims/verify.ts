@@ -82,14 +82,24 @@ export function verifyClaim(c: ClaimInput, ctx: VerifyContext): VerifyResult {
   const unsupportedEnts = claimEnts.filter((e) => !srcEntIds.has(e.canonical_id));
   if (unsupportedEnts.length) notes.push(`Kaynak haberlerde geçmeyen varlık: ${unsupportedEnts.map((e) => e.canonical_label).join(", ")}`);
 
-  // Sözlük dışı ad benzeri ifadeler: kaynak metinlerde birebir (katlanmış) geçmiyorsa doğrulanamaz.
-  const knownSurfaces = claimEnts.map((e) => matchKey(e.surface));
-  const srcText = matchKey(foundArticles.map((a) => a.title_original + " " + a.body_original).join(" "));
-  const unknownNames = namelikePhrases(c.text_tr).filter((p) => {
-    const k = matchKey(p);
-    return !knownSurfaces.some((s) => k.includes(s) || s.includes(k)) && !srcText.includes(k);
-  });
-  if (unknownNames.length) notes.push(`Kaynakta doğrulanamayan ad: ${unknownNames.join(", ")}`);
+  // Sözlük dışı ad/unvan benzeri ifadeler SÖZCÜK düzeyinde denetlenir: bilinen bir varlığın (ör. yer adı)
+  // aynı ifadede geçmesi, yanındaki kişi adını veya unvanı doğrulamaz. Bilinen varlık sözcükleri çıkarıldıktan
+  // sonra kalan her ardışık parça kaynak metinlerde (katlanmış biçimde) ayrıca aranır.
+  const knownTokens = new Set(claimEnts.flatMap((e) => matchKey(e.surface, "tr").split(" ")));
+  const srcText = " " + matchKey(foundArticles.map((a) => a.title_original + " " + a.body_original).join(" ")) + " ";
+  const unknownNames: string[] = [];
+  for (const phrase of namelikePhrases(c.text_tr)) {
+    let seg: string[] = [];
+    const flush = () => {
+      if (seg.length && !srcText.includes(" " + matchKey(seg.join(" "), "tr") + " ")) unknownNames.push(seg.join(" "));
+      seg = [];
+    };
+    for (const w of phrase.split(/\s+/)) {
+      if (knownTokens.has(matchKey(w, "tr"))) flush(); else seg.push(w);
+    }
+    flush();
+  }
+  if (unknownNames.length) notes.push(`Kaynakta doğrulanamayan ad/unvan: ${unknownNames.join(", ")}`);
 
   const supported = sources.filter((s) => s.support === "supported").length;
   let status: ClaimStatus;

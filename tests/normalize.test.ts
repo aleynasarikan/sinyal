@@ -31,8 +31,11 @@ describe("Unicode ve dil normalizasyonu", () => {
     expect(cleanForStorage("آتش‌سوزی")).toContain("‌");
   });
 
-  test("Saklama temizliği yön kontrol karakterlerini atar, harfleri değiştirmez", () => {
-    expect(cleanForStorage("‮أرمان‬")).toBe("أرمان");
+  // 2026-10-28 denetimi: eski test yön karakterlerinin SİLİNMESİNİ bekliyordu (bulgu 7). Artık özgün metin korunur.
+  test("Saklama biçimi yön karakterlerini ve NFD'yi korur; yalnız C0 kontrol karakterlerini atar", () => {
+    expect(cleanForStorage("\u202Eأرمان\u202C")).toBe("\u202Eأرمان\u202C");
+    expect(cleanForStorage("I\u0307stanbul")).toBe("I\u0307stanbul");
+    expect(cleanForStorage("a\u0000b\tc\n")).toBe("ab\tc\n");
   });
 
   test("Doğu Arap ve Farsça rakamları + ondalık ayırıcı", () => {

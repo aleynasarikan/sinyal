@@ -51,6 +51,7 @@ export class MemoryRepo implements Repo {
       if (f.country && this.sources.get(a.source_id)?.country !== f.country) return false;
       if (f.from && (!a.published_at || a.published_at < f.from)) return false;
       if (f.to && (!a.published_at || a.published_at > f.to)) return false;
+      if (f.undated && a.published_at) return false;
       if (entityIds && !entityIds.has(a.article_id)) return false;
       if (novelty && !novelty.has(a.article_id)) return false;
       if (q && !matchKey(a.title_original + " " + a.body_original).includes(q)) return false;

@@ -1,5 +1,21 @@
 # Test Raporu — 2026-10-28
 
+## Güncelleme: denetim düzeltmeleri (başlangıç commit'i `c97a1e8` üzerine)
+
+| Komut | Sonuç |
+|---|---|
+| `bunx tsc --noEmit` | Hatasız |
+| `bun test` | **110 geçti, 0 başarısız** (önceki 91 + 19 yeni regresyon testi; `tests/regressions.test.ts`) |
+| UI paketi (`Bun.build`) | Derleniyor; yeni metinler pakette mevcut. Tarayıcıda görsel doğrulama **yapılmadı** |
+
+Regresyon testleri düzeltmelerden önce yazıldı ve çalıştırıldı: 19 testin 13'ü başarısızdı; 6'sı mevcut davranışı
+koruma (bozmama) testleridir ve baştan geçiyordu. Bir eski test (`normalize.test.ts`, yön karakterlerinin silinmesini
+bekleyen) hatalı davranışı kodladığı için yeni davranışa göre güncellendi.
+
+---
+
+# İlk sürüm raporu
+
 ## Ortam
 - macOS (arm64). Sistemde **Bun, Docker ve ClickHouse kurulu değil**.
 - Bun 1.2.23 yalnız oturumun geçici çalışma alanına npm ile kuruldu (sistem/kabuk profili değiştirilmedi).

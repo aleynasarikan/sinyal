@@ -5,7 +5,7 @@
 // Skorlar SEZGİSELDİR (kalibre edilmemiştir); eşikler altın setle ayarlanmalıdır (docs/DEGERLENDIRME.md).
 
 import type { Article, DateQuality, ExtractedEntity, MatchReason, MatchStatus, NoveltyDecision } from "../domain/types.ts";
-import { extractNumbers, jaccard, matchKey, tokens } from "../text/normalize.ts";
+import { extractFactNumbers, jaccard, matchKey, tokens } from "../text/normalize.ts";
 import type { Gazetteer } from "./entities.ts";
 
 export const MATCHER_VERSION = "baseline-v1";
@@ -70,7 +70,7 @@ export function featuresOf(a: Article, ents: ExtractedEntity[], gz: Gazetteer, s
     entities: pick(["person", "org"]),
     places: pick(["place"]),
     concepts: pick(["keyword"]),
-    numbers: new Set([...extractNumbers(a.title_original), ...extractNumbers(a.body_original)]),
+    numbers: new Set([...extractFactNumbers(a.title_original), ...extractFactNumbers(a.body_original)]),
     titleTokens: new Set(tokens(a.title_original, lang)),
     bodyTokens: new Set(tokens(a.body_original, lang)),
     hedges: isHedged(a.title_original + " " + a.body_original, lang),
@@ -106,7 +106,7 @@ function overlap(a: Set<string>, b: Set<string>): { ratio: number | null; shared
   return { ratio: shared.length / Math.min(a.size, b.size), shared };
 }
 
-export interface MatchResult { score: number; reason: MatchReason; rejected: string | null }
+export interface MatchResult { score: number; reason: MatchReason; rejected: string | null; cautious?: boolean }
 
 export function scoreAgainst(f: ArticleFeatures, ev: EventState, gz: Gazetteer): MatchResult {
   const notes: string[] = [];
@@ -148,22 +148,31 @@ export function scoreAgainst(f: ArticleFeatures, ev: EventState, gz: Gazetteer):
     [WEIGHTS.concept, con.ratio], [WEIGHTS.place, plc.ratio], [WEIGHTS.entity, ent.ratio],
     [WEIGHTS.number, num.ratio === null ? null : Math.min(1, num.shared.length / 2)], [WEIGHTS.title, title],
   ];
-  let wsum = 0, s = 0, positives = 0;
+  let wsum = 0, s = 0;
   for (const [w, v] of parts) {
     if (v === null) continue; // bilgi yoksa ağırlık dağıtılır (eksik bilgi ceza sayılmaz)
     wsum += w; s += w * v;
-    if (v > 0) positives++;
   }
   const score = wsum ? s / wsum : 0;
   reason.score = Number(score.toFixed(3));
-  if (positives < 2) {
-    return { score: 0, reason: { ...reason, notes: [...notes, "Tek bir sinyal eşleşti; birleştirme için en az iki bağımsız sinyal gerekir."] }, rejected: "weak_evidence" };
+  // Ortak sayı yalnız skoru destekler; bağımsız kanıt sayılmaz (rastlantısal çakışma: 12 itfaiyeci / 12 ölü).
+  const substantive = [con.ratio, plc.ratio, ent.ratio].filter((v) => v !== null && v > 0).length + ((title ?? 0) >= 0.3 ? 1 : 0);
+  if (substantive < 2) {
+    return { score: 0, reason: { ...reason, notes: [...notes, "Birleştirme için sayı dışında en az iki bağımsız sinyal (konu, yer, kişi/kurum, başlık) gerekir."] }, rejected: "weak_evidence" };
   }
-  return { score, reason, rejected: null };
+  // Bir tarafta konu bilgisi yoksa olay türü denetlenemez: ortak kişi/kurum şartı aranır ve eşleşme belirsiz sayılır.
+  const cautious = !(f.concepts.size && ev.concepts.size);
+  if (cautious) {
+    if (!ent.ratio) {
+      return { score: 0, reason: { ...reason, notes: [...notes, "Olay türü (konu) bilinmiyor ve ortak kişi/kurum yok; birleştirilmedi."] }, rejected: "no_concept_no_entity" };
+    }
+    reason.notes.push("Bir tarafta konu bilgisi yok; olay türü denetlenemediği için eşleşme belirsiz işaretlendi.");
+  }
+  return { score, reason, rejected: null, cautious };
 }
 
-export function matchStatusFor(score: number, f: ArticleFeatures): MatchStatus | null {
-  if (score >= THRESHOLDS.confident) return f.timeMs === null ? "uncertain" : "confident";
+export function matchStatusFor(score: number, f: ArticleFeatures, cautious = false): MatchStatus | null {
+  if (score >= THRESHOLDS.confident) return f.timeMs === null || cautious ? "uncertain" : "confident";
   if (score >= THRESHOLDS.uncertain) return "uncertain";
   return null;
 }
@@ -176,7 +185,7 @@ export function findBestEvent(f: ArticleFeatures, events: Iterable<EventState>, 
     if (!best || res.score > best.res.score) best = { ev, res };
   }
   if (!best) return null;
-  const status = matchStatusFor(best.res.score, f);
+  const status = matchStatusFor(best.res.score, f, best.res.cautious);
   return status ? { ...best, status } : null;
 }
 

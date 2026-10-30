@@ -58,6 +58,7 @@ export class ClickHouseRepo implements Repo {
     if (f.country) { w.push("source_id IN (SELECT source_id FROM sources FINAL WHERE country = {country:String})"); p.country = f.country; }
     if (f.from) { w.push(`published_at >= ${TS("from")}`); p.from = f.from; }
     if (f.to) { w.push(`published_at <= ${TS("to")}`); p.to = f.to; }
+    if (f.undated) w.push("published_at IS NULL");
     if (f.entity) { w.push("article_id IN (SELECT article_id FROM extracted_entities WHERE canonical_id = {entity:String})"); p.entity = f.entity; }
     if (f.novelty) { w.push("article_id IN (SELECT article_id FROM event_members FINAL WHERE novelty = {novelty:String})"); p.novelty = f.novelty; }
     return { where: w.join(" AND "), params: p };

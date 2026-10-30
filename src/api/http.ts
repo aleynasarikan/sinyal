@@ -71,3 +71,20 @@ export const strParam = (v: string | null, max = 200): string | undefined => {
   const s = (v ?? "").trim();
   return s ? s.slice(0, max) : undefined;
 };
+
+/**
+ * Tarih aralığı parametresi. Yalın gün ("2026-10-28") UTC gün sınırına yuvarlanır: `from` → 00:00:00.000,
+ * `to` → 23:59:59.999 (seçilen gün DAHİL). Arayüz kullanıcının yerel gününü zaten tam zaman damgasına
+ * çevirerek gönderir (web/paging.ts → localDayBounds); tam zaman damgası aynen kullanılır.
+ */
+export function dateRangeParam(v: string | null, edge: "from" | "to"): string | undefined {
+  const s = (v ?? "").trim();
+  if (!s) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const t = Date.parse(s + (edge === "from" ? "T00:00:00.000Z" : "T23:59:59.999Z"));
+    return Number.isFinite(t) ? new Date(t).toISOString() : undefined;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(s)) return undefined;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? new Date(t).toISOString() : undefined;
+}

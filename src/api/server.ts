@@ -16,7 +16,7 @@ import { runIngestion } from "../pipeline/ingest.ts";
 import type { DataProvider } from "../providers/types.ts";
 import type { Repo } from "../store/repo.ts";
 import {
-  HttpError, SECURITY_HEADERS, SESSION_COOKIE, clientIp, intParam, json, readCookie, readJson, sessionCookie, strParam,
+  HttpError, SECURITY_HEADERS, SESSION_COOKIE, clientIp, dateRangeParam, intParam, json, readCookie, readJson, sessionCookie, strParam,
 } from "./http.ts";
 
 export interface AppDeps {
@@ -177,7 +177,9 @@ export function createApp(d: AppDeps) {
     }
     const latestReview = new Map<string, ClaimReview>();
     for (const r of [...claimData.reviews].sort((a, b) => a.created_at.localeCompare(b.created_at))) latestReview.set(r.claim_id, r);
-    const run = runs.find((r) => r.event_id === id) ?? null;
+    // İddialar son BAŞARILI çalıştırmadan gösterilir; son çalıştırma başarısızsa ayrıca bildirilir (önceki iddialar kaybolmaz).
+    const lastRun = runs.find((r) => r.event_id === id) ?? null;
+    const run = runs.find((r) => r.event_id === id && r.status === "ok") ?? null;
     return json({
       event: ev,
       articles: members.map((m) => {
@@ -196,7 +198,8 @@ export function createApp(d: AppDeps) {
       timeline: updates,
       conflicts: detectConflicts(arts, gz),
       analysis: run,
-      claims: claimData.claims.filter((cl) => !run || cl.analysis_run_id === run.run_id).map((cl) => ({
+      last_run: lastRun,
+      claims: claimData.claims.filter((cl) => run !== null && cl.analysis_run_id === run.run_id).map((cl) => ({
         ...cl,
         sources: claimData.sources.filter((s) => s.claim_id === cl.claim_id),
         review: latestReview.get(cl.claim_id) ?? null,
@@ -220,13 +223,17 @@ export function createApp(d: AppDeps) {
   on("GET", "/api/articles", "read", async (c) => {
     const sp = c.url.searchParams;
     const nov = strParam(sp.get("novelty"), 40);
-    const res = await repo.searchArticles({
+    const base = {
       q: strParam(sp.get("q")), lang: strParam(sp.get("lang"), 5), country: strParam(sp.get("country"), 2)?.toUpperCase(),
       source_id: strParam(sp.get("source"), 80), entity: strParam(sp.get("entity"), 80),
-      from: isoParam(sp.get("from")), to: isoParam(sp.get("to")),
       novelty: nov && NOVELTY.has(nov) ? (nov as NoveltyLabel) : undefined,
-      limit: intParam(sp.get("limit"), 30, 1, 100), offset: intParam(sp.get("offset"), 0, 0, 100_000),
-    });
+    };
+    const from = dateRangeParam(sp.get("from"), "from"), to = dateRangeParam(sp.get("to"), "to");
+    const [res, undated] = await Promise.all([
+      repo.searchArticles({ ...base, from, to, limit: intParam(sp.get("limit"), 30, 1, 100), offset: intParam(sp.get("offset"), 0, 0, 100_000) }),
+      // Tarih filtresi varken yayın tarihi olmayan haberler dışarıda kalır; kaç tane olduğu kullanıcıya bildirilir.
+      from || to ? repo.searchArticles({ ...base, undated: true, limit: 1, offset: 0 }) : Promise.resolve({ total: 0 }),
+    ]);
     const ids = res.items.map((a) => a.article_id);
     const [members, sources, translations] = await Promise.all([repo.memberOfArticles(ids), repo.listSources(), repo.translationsFor(ids)]);
     const evIds = [...new Set(members.map((m) => m.event_id))];
@@ -234,6 +241,7 @@ export function createApp(d: AppDeps) {
     const srcById = new Map(sources.map((s) => [s.source_id, s]));
     return json({
       total: res.total,
+      excluded_undated: undated.total,
       items: res.items.map((a) => {
         const m = members.find((x) => x.article_id === a.article_id);
         const s = srcById.get(a.source_id);
@@ -374,12 +382,6 @@ export function createApp(d: AppDeps) {
       return json({ ok: false, error: "Sunucu hatası" }, 500);
     }
   };
-}
-
-function isoParam(v: string | null): string | undefined {
-  if (!v) return undefined;
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t).toISOString() : undefined;
 }
 
 function publicUser(u: User) {
