@@ -13,7 +13,7 @@ Gereksinim: Bun ≥ 1.2.
 
 ```bash
 bun install
-bun run check                 # typecheck + 91 test
+bun run check                 # typecheck + 110 test
 SINYAL_COOKIE_SECURE=0 SINYAL_DEMO_USERS=1 bun run start
 # → http://127.0.0.1:8790
 ```
@@ -35,8 +35,7 @@ docker compose exec app cat /app/var/.sinyal-seed-password
 ClickHouse yalnız `127.0.0.1:8124`'e açılır (UMİ'nin 8123'üyle çakışmaz). Migration'lar uygulama açılışında
 otomatik çalışır; elle: `bun run migrate`.
 
-> ⚠️ Bu Compose kurulumu geliştirme ortamında **çalıştırılarak doğrulanmadı** (makinede Docker yok).
-> Bkz. `docs/TEST_RAPORU.md`.
+> Compose kurulumu 2026-10-31'de yerelde (Colima) çalıştırılarak doğrulandı. Bkz. `docs/TEST_RAPORU.md`.
 
 ## Komutlar
 

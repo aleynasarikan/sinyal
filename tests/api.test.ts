@@ -35,7 +35,7 @@ beforeAll(async () => {
   }
   initLlmStats("mock", "mock-deterministic", true);
   const cfg = loadConfig({ SINYAL_RATE_LOGIN_PER_MIN: "3" });
-  app = createApp({ cfg, repo, gz, provider: new MockDataProvider(now), llm: new MockLlmProvider() });
+  app = createApp({ cfg, repo, gz, provider: new MockDataProvider(now), llm: new MockLlmProvider(), clock: () => now().getTime() });
 });
 
 describe("Kimlik doğrulama", () => {

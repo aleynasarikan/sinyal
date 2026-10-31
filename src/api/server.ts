@@ -27,6 +27,8 @@ export interface AppDeps {
   llm: LlmProvider;
   /** Statik varlıklar: yol → [içerik, content-type] */
   assets?: Map<string, [string, string]>;
+  /** Saat (testlerde sabitlenebilir); varsayılan: Date.now */
+  clock?: () => number;
 }
 
 interface Ctx { req: Request; url: URL; ip: string; user: User | null; token: string | null; params: string[] }
@@ -38,6 +40,7 @@ const REVIEW: ReadonlySet<string> = new Set(["approved", "corrected", "rejected"
 
 export function createApp(d: AppDeps) {
   const { cfg, repo, gz } = d;
+  const clock = d.clock ?? Date.now;
   const loginIpLimiter = new RateLimiter(cfg.rate.loginPerMin);
   const loginGlobalLimiter = new RateLimiter(cfg.rate.loginPerMin * 20);
   const apiLimiter = new RateLimiter(cfg.rate.apiPerMin);
@@ -87,7 +90,7 @@ export function createApp(d: AppDeps) {
   // ---------- Pano ----------
   on("GET", "/api/dashboard", "read", async (c) => {
     const hours = c.url.searchParams.get("window") === "72" ? 72 : 24;
-    const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+    const since = new Date(clock() - hours * 3_600_000).toISOString();
     const [stats, updates, events, prov, ingRuns, anRuns, sources] = await Promise.all([
       repo.articleStats(since), repo.updatesSince(since), repo.listEvents({ since, limit: 500, offset: 0 }),
       d.provider.status(), repo.listIngestionRuns(5), repo.listAnalysisRuns(50), repo.listSources(),
@@ -132,7 +135,7 @@ export function createApp(d: AppDeps) {
     const hours = intParam(sp.get("window"), 0, 0, 24 * 30);
     const res = await repo.listEvents({
       q: strParam(sp.get("q")), lang: strParam(sp.get("lang"), 5), entity: strParam(sp.get("entity"), 80),
-      since: hours ? new Date(Date.now() - hours * 3_600_000).toISOString() : undefined,
+      since: hours ? new Date(clock() - hours * 3_600_000).toISOString() : undefined,
       limit: intParam(sp.get("limit"), 30, 1, 100), offset: intParam(sp.get("offset"), 0, 0, 100_000),
     });
     const members = await repo.membersOf(res.items.map((e) => e.event_id));

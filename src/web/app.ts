@@ -97,7 +97,7 @@ function shell(title: string, content: HTMLElement, actions?: HTMLElement): HTML
     NAV.filter(([, , role]) => !role || state.user?.role === role).map(([href, label]) =>
       h("a", { href, "aria-current": href === "#/" + r.name || (href === "#/olaylar" && r.name === "olay") ? "page" : undefined }, label)),
     h("div", { class: "spacer" }),
-    h("div", { class: "who" }, h("div", {}, state.user?.name ?? ""), h("div", {}, roleTr(state.user?.role)),
+    h("div", { class: "who" }, h("div", {}, state.user?.name ?? ""), roleTr(state.user?.role) !== state.user?.name ? h("div", {}, roleTr(state.user?.role)) : null,
       h("button", { class: "secondary", onclick: async () => { await post("/api/auth/logout").catch(() => null); state.user = null; render(); } }, "Çıkış")),
   );
   const top = h("div", { class: "top" }, h("h1", {}, title),
@@ -175,7 +175,7 @@ async function renderDashboard(w: 24 | 72) {
       const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
       const max = Math.max(1, ...entries.map((e) => e[1]));
       return h("div", { class: "card" }, h("h2", {}, title), entries.length ? h("table", {}, h("tbody", {},
-        entries.map(([k, v]) => h("tr", {}, h("td", {}, label(k)), h("td", { style: undefined }, h("div", { class: "bar", "aria-hidden": "true", "data-w": v })), h("td", {}, String(v)))))) : empty("Bu pencerede veri yok."));
+        entries.map(([k, v]) => h("tr", {}, h("td", {}, label(k)), h("td", { class: "barcell" }, h("div", { class: "bar", "aria-hidden": "true", "data-w": v })), h("td", {}, String(v)))))) : empty("Bu pencerede veri yok."));
     };
     const el = h("div", {}, providerBanner(),
       h("div", { class: "grid kpis" },
@@ -326,7 +326,7 @@ async function renderEvent(id: string) {
         h("div", { class: "row" }, nov(a.member.novelty), langBadge(a.lang, a.lang_confidence), badge(...(DATEQ[a.date_quality] ?? [a.date_quality, "muted"]) as [string, string]),
           a.source.unknown ? badge("Kayıtsız kaynak", "bad") : null,
           a.member.status === "uncertain" ? badge("Belirsiz eşleşme", "warn") : null),
-        h("div", { class: "meta" }, h("strong", {}, a.source.name), a.source.country ? `(${a.source.country})` : null, `Yayın: ${fmt(a.published_at)}`, `SİNYAL ilk görme: ${fmt(a.first_seen_at)}`),
+        h("div", { class: "meta" }, h("strong", {}, a.source.name), a.source.country ? h("span", {}, `(${a.source.country})`) : null, h("span", {}, `Yayın: ${fmt(a.published_at)}`), h("span", {}, `SİNYAL ilk görme: ${fmt(a.first_seen_at)}`)),
         orig(a.title_original, a.lang, "h3"),
         orig(a.body_original, a.lang, "p", "small"),
         a.translation_tr ? h("p", { class: "small" }, "Türkçe çeviri: ", a.translation_tr.title) : h("p", { class: "meta" }, "Türkçe çeviri yok (çeviri modeli yapılandırılmadı)."),
@@ -408,7 +408,7 @@ async function renderSearch(q: URLSearchParams) {
         ? [orig(a.title_original, a.lang, "h3"), orig(a.snippet, a.lang, "p", "small")]
         : [h("h3", {}, a.translation_tr?.title ?? a.event?.title_tr ?? "Türkçe analiz yok"),
            h("p", { class: "small" }, a.translation_tr ? a.translation_tr.summary : "Bu haberin Türkçe çevirisi yok; olay düzeyindeki kural tabanlı başlık gösteriliyor. Özgün metin için görünümü değiştirin.")],
-      h("div", { class: "meta" }, h("strong", {}, a.source.name), a.source.country || null, `Yayın: ${fmt(a.published_at)}`,
+      h("div", { class: "meta" }, h("strong", {}, a.source.name), a.source.country ? h("span", {}, a.source.country) : null, h("span", {}, `Yayın: ${fmt(a.published_at)}`),
         h("a", { href: a.url, rel: "noopener noreferrer", target: "_blank" }, "Kaynak URL ↗"),
         a.event ? h("a", { href: `#/olay/${encodeURIComponent(a.event.event_id)}` }, `Olay: ${a.event.title_tr}`) : null))) : [empty(d.total ? "Bu sayfada haber yok." : "Filtrelere uyan haber yok.")];
     const undated = d.excluded_undated ? h("div", { class: "banner warn", role: "status" },

@@ -1,5 +1,21 @@
 # Test Raporu — 2026-10-28
 
+## Güncelleme 2: ortam kurulumu, Compose ve arayüz doğrulaması (2026-10-31)
+
+Ortam: Bun 1.4.4 (Homebrew), Docker 29.5.2 + Compose 5.6.1 (Colima).
+
+| Kontrol | Sonuç |
+|---|---|
+| `bun run check` | **110 geçti, 0 başarısız**. Pano testi tarihe bağlıydı (demo veri 28.10'a sabit, uç nokta `Date.now()`); `createApp`'e `clock` eklendi, testte sabitlendi |
+| `docker compose up -d --build` | ClickHouse 24.8 sağlıklı, migration uygulandı, 21 demo haber yazıldı, nginx 200 |
+| nginx üzerinden API (ClickHouse deposu) | giriş, pano, 4 olay, olay detayı (10 haber / 1 çelişki / 3 iddia), Arapça arama, novelty filtresi, mock analiz, yeniden alım (0 yeni / 21 atlandı), CSRF 403, güvenlik başlıkları — bellek kipiyle aynı sonuçlar |
+| Arayüz (Chrome, masaüstü) | Giriş, panel, olay haritası, haber arama (RTL dahil), kanıt laboratuvarı, olay detayı kontrol edildi |
+
+Arayüzde düzeltilenler: kaynak dağılımı çubuklarının uzun etiketlerle ezilmesi; haber meta satırında
+"RUYayın:" bitişik yazımı; kenar çubuğunda ad ve rolün ("Yönetici") iki kez görünmesi.
+
+Hâlâ doğrulanmayan: dar ekran / mobil görünüm, gerçek LLM uç noktası, gerçek UMİ API'si, gerçek kalite metrikleri.
+
 ## Güncelleme: denetim düzeltmeleri (başlangıç commit'i `c97a1e8` üzerine)
 
 | Komut | Sonuç |

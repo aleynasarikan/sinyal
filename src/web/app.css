@@ -78,6 +78,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: start; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.barcell { width: 40%; }
 .bar { height: 8px; background: var(--accent); border-radius: 4px; min-width: 2px; }
 
 .event-card { cursor: default; }
