@@ -158,11 +158,13 @@ details > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .atlas-proj[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
 .atlas-legend { position: absolute; left: 12px; bottom: 12px; z-index: 2; display: flex; gap: 14px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--muted); }
 .atlas-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.atlas-legend span[hidden] { display: none; }
+.atlas-legend { max-width: calc(100% - 190px); row-gap: 4px; }
 .lg { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
 .lg-root { border: 2px solid var(--accent); }
 .lg-flow, .lg-mut { width: 22px; height: 0; border-radius: 0; border-top: 3px solid var(--info); }
 .lg-mut { border-top-color: var(--bad); }
-.atlas-timeline { position: absolute; left: 50%; transform: translateX(-50%); bottom: 58px; z-index: 2; display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; width: min(560px, calc(100% - 24px)); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.atlas-timeline { position: absolute; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 2; display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; width: min(560px, calc(100% - 24px)); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
 .atlas-timeline[hidden] { display: none; }
 .atlas-timeline input[type="range"] { flex: 1; min-height: 0; padding: 0; accent-color: var(--accent); }
 .atlas-time { white-space: nowrap; min-width: 92px; text-align: end; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -267,6 +269,7 @@ details.tech { margin-top: 14px; border-top: 1px solid var(--border); padding-to
   .r-summary + .r-event, .r-event + .r-event { break-before: page; } /* tek olay raporunda ilk sayfa boş kalmasın */
   .r-summary, .r-map, .report tr, .r-tile, .r-callout { break-inside: avoid; }
   .report h2, .report h3 { break-after: avoid; }
+  .r-gap { break-before: page; break-inside: auto; } /* boşluk bölümü kendi sayfasında başlar */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
@@ -334,3 +337,31 @@ details.card.tech > summary { font-size: 13px; }
 .status-hero.bad { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
 @media (max-width: 820px) { .nav-group { display: none; } .bars li { grid-template-columns: 100px 1fr 32px; } }
 .bar-track .bar { display: block; height: 8px; border-radius: 4px; background: var(--accent); }
+
+/* ---------- Düzeltme boşluğu ---------- */
+.ok-text { color: var(--ok); font-weight: 600; }
+.lg-ok { width: 22px; height: 0; border-radius: 0; border-top: 3px dashed var(--ok); }
+.lg-gap { background: var(--warn); }
+.atlas-node.ok .dot { background: var(--ok); box-shadow: 0 0 0 2px var(--ok); }
+.atlas-node.nofix .dot { background: var(--warn); box-shadow: 0 0 0 2px var(--warn); }
+.atlas-node.ok.root .dot { box-shadow: 0 0 0 2px var(--surface), 0 0 0 5px var(--ok); }
+.atlas-steps li.corr.done { border-inline-start-color: var(--ok); }
+.gap { border: 1px solid var(--border); border-inline-start: 4px solid var(--ok); border-radius: var(--radius); padding: 10px 12px; margin: 12px 0; background: var(--surface); }
+.gap h3 { margin: 0 0 6px; }
+.gap h4 { margin: 12px 0 4px; font-size: 14px; }
+.gap-line { font-weight: 600; margin: 0 0 6px; }
+.gap-langs { margin: 8px 0; }
+.gap-bar { height: 10px; border-radius: 999px; background: var(--warn-bg); border: 1px solid var(--border); overflow: hidden; }
+.gap-fill { display: block; height: 100%; background: var(--ok); }
+.gap-targets { margin: 4px 0 8px; padding-inline-start: 20px; }
+.gap-targets > li { margin-bottom: 6px; }
+.gap-targets ul { margin: 2px 0 0; padding-inline-start: 16px; }
+.gap button { margin-top: 6px; }
+.tile.ok .v { color: var(--ok); }
+
+/* Rapor */
+.r-gap { border: 1px solid #b7dcc6; border-inline-start: 4px solid #178a4c; border-radius: 4px; padding: 8px 12px; margin: 10px 0; }
+.r-gap h3 { margin-top: 0; }
+.r-gapbar { height: 10px; border-radius: 999px; background: #fdecc8; border: 1px solid #e3c98a; overflow: hidden; margin: 6px 0; }
+.r-gapbar span { display: block; height: 100%; background: #178a4c; }
+.r-ok { background: #e3f4ea; color: #146c43; }

@@ -20,7 +20,7 @@
 // SİNYAL'in izlemediği bir yayın olabilir.
 
 import type { Article, ExtractedEntity, Source } from "../domain/types.ts";
-import { hedgePhrases } from "../pipeline/match.ts";
+import { denialPhrases, hedgePhrases } from "../pipeline/match.ts";
 import { extractFactNumbers, jaccard, matchKey, tokens } from "../text/normalize.ts";
 
 export const SPREAD_VERSION = "yayilim-v1";
@@ -72,8 +72,18 @@ export interface SpreadNode {
   edge: SpreadEdge | null;
   children: string[];
   hedges: string[];
+  /** Yalanlama ifadeleri; doluysa haber iddia zincirine değil YALANLAMA zincirine girer. */
+  denials: string[];
   facts: string[];
   mutations: Mutation[];
+}
+
+/** Olayla ilgili yalanlama/düzeltme haberlerinin kendi zinciri (iddia zincirinden ayrı kurulur). */
+export interface CorrectionChain {
+  nodes: SpreadNode[];
+  roots: string[];
+  first_seen: string | null;
+  first_at: string | null;
 }
 
 export interface SpreadAlert extends Mutation {
@@ -103,6 +113,8 @@ export interface SpreadResult {
   reach: Array<{ t: string; articles: number; langs: number; countries: number }>;
   momentum: { label: Momentum; last: number; prev: number; window_hours: number };
   alerts: SpreadAlert[];
+  /** Yalanlama zinciri; olayda yalanlama yoksa null. Yukarıdaki tüm ölçüler yalnız İDDİA haberlerinden hesaplanır. */
+  correction: CorrectionChain | null;
   notes: string[];
 }
 
@@ -159,43 +171,20 @@ export function computeSpread(inp: SpreadInput): SpreadResult {
       node: {
         article_id: a.article_id, source_id: a.source_id, source_name: s?.name ?? a.source_id, country: s?.country ?? "",
         lang, title: a.title_original, time: t === null ? null : new Date(t).toISOString(), placed: t !== null,
-        generation: null, parent: null, edge: null, children: [], hedges: hedgePhrases(text, lang), facts: [...numbers], mutations: [],
+        generation: null, parent: null, edge: null, children: [], hedges: hedgePhrases(text, lang), denials: denialPhrases(text, lang), facts: [...numbers], mutations: [],
       },
     };
   });
 
-  const placed = work.filter((w) => w.t !== null).sort((x, y) => x.t! - y.t! || x.a.article_id.localeCompare(y.a.article_id));
   const byId = new Map(work.map((w) => [w.a.article_id, w]));
   const notes: string[] = [];
-
-  // ---- 1-2. Olası kaynak ----
-  for (let i = 0; i < placed.length; i++) {
-    const c = placed[i]!;
-    let best: { p: Work; edge: SpreadEdge } | null = null;
-    for (let j = 0; j < i; j++) {
-      const p = placed[j]!;
-      if (p.t! >= c.t!) continue; // aynı anda yayımlanan biri diğerinin kaynağı sayılamaz
-      if (c.t! - p.t! > SPREAD_PARAMS.maxHoursBack * H) continue;
-      if (p.a.source_id === c.a.source_id && !sameStory(p, c)) continue;
-      const edge = scoreEdge(p, c, srcById);
-      if (edge.score < SPREAD_PARAMS.minEdgeScore) continue;
-      // Eşitlikte: atıf/kopya kenarında daha yakın zamanlı aday (zincirdeki son halka); yalnız ortak olguya
-      // dayanan kenarda olguyu İLK getiren aday — aksi halde ajans haberleri sahte derin zincir oluşturur.
-      const tie = best && Math.abs(edge.score - best.edge.score) <= 1e-9;
-      const preferLater = edge.kind !== "shared_facts";
-      if (!best || edge.score > best.edge.score + 1e-9 || (tie && (preferLater ? p.t! > best.p.t! : p.t! < best.p.t!))) best = { p, edge };
-    }
-    if (best) {
-      c.node.parent = best.p.a.article_id;
-      c.node.edge = best.edge;
-      best.p.node.children.push(c.a.article_id);
-      c.node.mutations = mutationsOf(best.p, c, best.edge);
-    }
-  }
-
-  // ---- Nesiller ----
+  // İddia ve yalanlama haberleri AYRI zincir kurar: yalanlama iddianın "aktarımı" değildir, kendi yayılımı vardır.
+  const isCorr = (w: Work) => w.node.denials.length > 0;
+  const claims = work.filter((w) => !isCorr(w));
+  const corrs = work.filter(isCorr);
+  const placed = link(claims.filter((w) => w.t !== null), byId, srcById);
+  const corrPlaced = link(corrs.filter((w) => w.t !== null), byId, srcById);
   const roots = placed.filter((w) => !w.node.parent).map((w) => w.a.article_id);
-  for (const w of placed) w.node.generation = w.node.parent ? (byId.get(w.node.parent)!.node.generation ?? 0) + 1 : 0;
   const generations = placed.length ? Math.max(...placed.map((w) => w.node.generation ?? 0)) + 1 : 0;
 
   // ---- R: yayın başına ortalama aktarım (sağdan sansürlü) ----
@@ -231,7 +220,7 @@ export function computeSpread(inp: SpreadInput): SpreadResult {
     .flatMap((w) => w.node.mutations.map((m) => ({ ...m, article_id: w.a.article_id, parent: w.node.parent! })))
     .sort((x, y) => sevRank[x.severity] - sevRank[y.severity]);
 
-  const unplaced = work.filter((w) => w.t === null).map((w) => w.a.article_id);
+  const unplaced = claims.filter((w) => w.t === null).map((w) => w.a.article_id);
   if (unplaced.length) notes.push(`${unplaced.length} haberin yayın zamanı kesin olmadığı için zincire yerleştirilmedi.`);
   if (roots.length > 1) notes.push(`${roots.length} bağımsız giriş noktası var: bu haberler önceki yayınlara bağlanacak yeterli kanıt taşımıyor.`);
 
@@ -239,7 +228,7 @@ export function computeSpread(inp: SpreadInput): SpreadResult {
   return {
     version: SPREAD_VERSION,
     event_id: inp.event_id,
-    nodes: [...placed, ...work.filter((w) => w.t === null)].map((w) => w.node),
+    nodes: [...placed, ...claims.filter((w) => w.t === null)].map((w) => w.node),
     roots,
     first_seen: first ? first.a.article_id : null,
     unplaced,
@@ -258,8 +247,44 @@ export function computeSpread(inp: SpreadInput): SpreadResult {
     reach,
     momentum: { label, last, prev, window_hours: SPREAD_PARAMS.momentumHours },
     alerts,
+    correction: corrs.length ? {
+      nodes: [...corrPlaced, ...corrs.filter((w) => w.t === null)].map((w) => w.node),
+      roots: corrPlaced.filter((w) => !w.node.parent).map((w) => w.a.article_id),
+      first_seen: corrPlaced[0]?.a.article_id ?? null,
+      first_at: corrPlaced[0]?.node.time ?? null,
+    } : null,
     notes,
   };
+}
+
+/** Zaman sırasına koyar, her habere olası kaynağını bulur ve nesilleri hesaplar (yerinde günceller). */
+function link(list: Work[], byId: Map<string, Work>, srcById: Map<string, Source>): Work[] {
+  const placed = [...list].sort((x, y) => x.t! - y.t! || x.a.article_id.localeCompare(y.a.article_id));
+  for (let i = 0; i < placed.length; i++) {
+    const c = placed[i]!;
+    let best: { p: Work; edge: SpreadEdge } | null = null;
+    for (let j = 0; j < i; j++) {
+      const p = placed[j]!;
+      if (p.t! >= c.t!) continue; // aynı anda yayımlanan biri diğerinin kaynağı sayılamaz
+      if (c.t! - p.t! > SPREAD_PARAMS.maxHoursBack * H) continue;
+      if (p.a.source_id === c.a.source_id && !sameStory(p, c)) continue;
+      const edge = scoreEdge(p, c, srcById);
+      if (edge.score < SPREAD_PARAMS.minEdgeScore) continue;
+      // Eşitlikte: atıf/kopya kenarında daha yakın zamanlı aday (zincirdeki son halka); yalnız ortak olguya
+      // dayanan kenarda olguyu İLK getiren aday — aksi halde ajans haberleri sahte derin zincir oluşturur.
+      const tie = best && Math.abs(edge.score - best.edge.score) <= 1e-9;
+      const preferLater = edge.kind !== "shared_facts";
+      if (!best || edge.score > best.edge.score + 1e-9 || (tie && (preferLater ? p.t! > best.p.t! : p.t! < best.p.t!))) best = { p, edge };
+    }
+    if (best) {
+      c.node.parent = best.p.a.article_id;
+      c.node.edge = best.edge;
+      best.p.node.children.push(c.a.article_id);
+      c.node.mutations = mutationsOf(best.p, c, best.edge);
+    }
+  }
+  for (const w of placed) w.node.generation = w.node.parent ? (byId.get(w.node.parent)!.node.generation ?? 0) + 1 : 0;
+  return placed;
 }
 
 function sameStory(p: Work, c: Work): boolean {

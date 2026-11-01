@@ -228,8 +228,11 @@ export function createApp(d: AppDeps) {
   // ---------- Yayılım ----------
   on("GET", "/api/events/:id/spread", "read", async (c) => {
     const id = c.params[0]!;
-    if (!(await repo.getEvent(id))) throw new HttpError(404, "Olay bulunamadı");
-    return json(await eventSpread(repo, id, clock()));
+    const ev = await repo.getEvent(id);
+    if (!ev) throw new HttpError(404, "Olay bulunamadı");
+    const s = await eventSpread(repo, id, clock());
+    // gap: düzeltme boşluğu (ülke/dil kapsaması, önerilen hedefler) — atlasla aynı hesap.
+    return json({ ...s, gap: atlasEvent(ev, s).correction });
   });
 
   /** Penceredeki olaylar + yayılımları (radar ve atlas ortak kullanır). */

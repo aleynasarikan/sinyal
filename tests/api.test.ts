@@ -211,6 +211,16 @@ describe("Atlas API", () => {
     expect(d.countries.DE.first_seen).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(d)).not.toContain("body_original"); // atlas tam metin taşımaz
   });
+  test("Düzeltme boşluğu atlasta ve olay yayılımında aynı", async () => {
+    const c = await loginAs("izleyici@t.local");
+    const d = await (await get("/api/atlas?window=72", c)).json();
+    const e = d.events.find((x: any) => x.correction);
+    expect(e.title_tr).toContain("Sınır kapatma");
+    expect(e.correction.gap.sort()).toEqual(["IR", "QA", "RU", "US"]);
+    const s = await (await get(`/api/events/${encodeURIComponent(e.event_id)}/spread`, c)).json();
+    expect(s.gap.coverage).toBe(e.correction.coverage);
+    expect(s.correction.nodes.length).toBe(3);
+  });
   test("Statik varlıklar aynı kökenden: worker, harita stili, sınırlar", async () => {
     const { buildWebAssets } = await import("../src/web/build.ts");
     const assets = await buildWebAssets();

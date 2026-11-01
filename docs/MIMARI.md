@@ -158,6 +158,23 @@ tarayıcının yazdırma penceresini açar (Hedef: PDF olarak kaydet); A4 yazdı
 `SINYAL-Yayilim-Raporu-YYYY-AA-GG`. Sunucuda PDF üretilmez: Arapça/Farsça şekillendirme ve Türkçe karakterler için yazı tipi
 gömme ek bağımlılık ister; tarayıcı bunları zaten doğru çizer.
 
+## Düzeltme boşluğu (`denialPhrases`, `correctionGap`)
+
+Soru: "Yalanlama, iddianın ulaştığı yerlere ulaştı mı? Ulaşmadıysa açıklamayı nereye, hangi dilde göndermeli?"
+
+- **Yalanlama tanıma:** `src/pipeline/match.ts` → `denialPhrases` — dil başına yalanlama ifadeleri (denied, dementiert,
+  yalanladı, опроверг, نفت, تکذیب, dément…). Kelime başından aranır (kısa Arapça köklerin başka sözcük içinde
+  yakalanmaması için). Model yok; sözlük genişletilebilir.
+- **Ayrı zincir:** `computeSpread` yalanlama haberlerini iddia zincirinden ayırır (`correction`); kendi atıf zincirini
+  kurar. İddia zincirinin tüm ölçüleri (R, ivme, mutasyonlar) yalnız iddia haberlerinden hesaplanır.
+- **Boşluk:** `src/spread/atlas.ts` → `correctionGap`: iddia ülke/dilleri − yalanlama ülke/dilleri; kapsama oranı;
+  **hedefler** = boşluktaki her ülkede iddiayı ilk yayan kaynak, öncelik: bilgiyi değiştiren > iddiayı yeni dile
+  taşıyan > ilk çıkan > diğer; **after** = ilk yalanlamadan sonra iddiayı yayımlamaya devam edenler.
+- **Arayüz:** harita yeşil yalanlama katmanı (kesikli, ters kavisli çizgi) + "Boşluğu haritada göster" (yeşil ulaştı /
+  turuncu ulaşmadı); yan panel, olay sayfası, Özet ve PDF raporunda boşluk bölümü.
+- **Sınırlar:** Yalanlama ifadesi içeren her haber yalanlama sayılır (ör. "X iddiaları yalanladı ama…" gibi karşı
+  görüş içeren metinler); kapsama ülke düzeyindedir, okur kitlesi büyüklüğünü dikkate almaz. Analist doğrulaması gerekir.
+
 ## Güven puanları hakkında
 
 `lang_confidence` ve `match_score` **sezgiseldir, kalibre edilmemiştir**. Arayüzde doğrulanmış gerçek gibi sunulmaz;

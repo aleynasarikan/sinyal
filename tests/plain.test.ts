@@ -43,3 +43,14 @@ describe("Sade dil katmanı", () => {
     expect(weakLinkNote("citation")).toBeNull();
   });
 });
+
+describe("Düzeltme boşluğu sade dili", () => {
+  test("Hedef gerekçeleri okunur cümlelere çevrilir", async () => {
+    const { targetReasons, gapLine, pct } = await import("../src/web/plain.ts");
+    expect(targetReasons({ cc: "QA", lang: "ar", source: "x", reasons: ["brought_lang", "changed"], changes: [{ kind: "number_changed", severity: "high", from: "40", to: "400" }], sources_in_country: 1 }))
+      .toEqual(["İddiayı ilk kez Arapça yayımlayan kaynak.", "Rakam değişti: 40 → 400"]);
+    expect(targetReasons({ cc: "US", lang: "en", source: "x", reasons: [], changes: [], sources_in_country: 1 })).toEqual(["İddiayı bu ülkede yayımlayan kaynak."]);
+    expect(gapLine({ claim_countries: ["DE", "GB", "QA"], covered: ["GB"] })).toBe("İddia 3 ülkeye ulaştı · Yalanlama 1 ülkeye ulaştı");
+    expect(pct(0.43)).toBe("%43");
+  });
+});

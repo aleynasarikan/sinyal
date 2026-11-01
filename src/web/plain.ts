@@ -106,3 +106,25 @@ export const conflictTitle = (kind: string, label: string): string =>
 
 /** 1 234 → "1.234" (Türkçe binlik ayırıcı). */
 export const num = (n: number): string => n.toLocaleString("tr-TR");
+
+// ---------- Düzeltme boşluğu ----------
+export interface PlainGapTarget { cc: string; lang: string; source: string; reasons: string[]; changes: PlainChange[]; sources_in_country: number }
+
+/** Açıklama hedefinin neden önerildiğini sade dille verir. */
+export function targetReasons(t: PlainGapTarget): string[] {
+  const out: string[] = [];
+  if (t.reasons.includes("root")) out.push("İddianın ilk çıktığı yer.");
+  if (t.reasons.includes("brought_lang")) out.push(`İddiayı ilk kez ${langName(t.lang)} yayımlayan kaynak.`);
+  for (const c of t.changes) { const s = changeText(c); if (s) out.push(s); }
+  if (t.sources_in_country > 1) out.push(`Bu ülkede ${t.sources_in_country} kaynak iddiayı yayımladı.`);
+  if (!out.length) out.push("İddiayı bu ülkede yayımlayan kaynak.");
+  return out;
+}
+
+/** Kapsama oranı: 0.43 → "%43". */
+export const pct = (x: number): string => `%${Math.round(x * 100)}`;
+
+/** Boşluğun tek cümlelik özeti (kartlarda ve raporda). */
+export function gapLine(g: { claim_countries: string[]; covered: string[] }): string {
+  return `İddia ${g.claim_countries.length} ülkeye ulaştı · Yalanlama ${g.covered.length} ülkeye ulaştı`;
+}

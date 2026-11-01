@@ -2,7 +2,7 @@
 // GÜVENLİK: Sunucudan gelen hiçbir metin innerHTML ile eklenmez; tüm içerik textContent ile yazılır.
 
 import { localDayBounds, pageInfo } from "./paging.ts";
-import { changeText, conflictTitle, countryName, duration, eventLine, langName, newsKind, num, sourceName, status, updateText, visibleChanges, weakLinkNote, when } from "./plain.ts";
+import { changeText, conflictTitle, countryName, duration, eventLine, gapLine, langName, newsKind, num, pct, sourceName, status, targetReasons, updateText, visibleChanges, weakLinkNote, when } from "./plain.ts";
 
 type Json = any; // API yanıtları sunucu tarafında şemalıdır; arayüzde yalnız gösterim için okunur.
 
@@ -199,7 +199,10 @@ async function renderDashboard(w: 24 | 72) {
         return h("li", { class: n ? "hot" : "" },
           h("a", { class: "watch-title", href: `#/olay/${encodeURIComponent(e.event_id)}` }, e.title_tr || "Adlandırılmamış olay"),
           h("div", { class: "row" }, badge(st.label, st.tone, st.hint), h("span", { class: "small muted" }, eventLine(e))),
-          n ? h("div", { class: "small warn-text" }, `⚠ Yayılırken ${n} kez değişti`) : null);
+          n ? h("div", { class: "small warn-text" }, `⚠ Yayılırken ${n} kez değişti`) : null,
+          e.correction ? h("div", { class: `small ${e.correction.gap.length ? "warn-text" : "ok-text"}` },
+            e.correction.gap.length ? `⚠ Yalanlama, iddianın ulaştığı ${e.correction.gap.length} ülkeye ulaşmadı · ` : "✓ Yalanlama, iddianın ulaştığı tüm ülkelere ulaştı",
+            e.correction.gap.length ? h("a", { href: `#/atlas?olay=${encodeURIComponent(e.event_id)}` }, "Boşluğu gör →") : null) : null);
       })) : empty(`${scope} dikkat gerektiren bir olay yok.`));
 
     const bars = (title: string, data: Array<[string, number]>) => {
@@ -314,6 +317,7 @@ async function renderEvent(id: string) {
     const artById = new Map<string, Json>(d.articles.map((a: Json) => [a.article_id, a]));
     const artLabel = (aid: string) => { const a = artById.get(aid); return a ? sourceName(a.source.name) : aid; };
     const nSources = new Set(d.articles.map((a: Json) => a.source.id)).size;
+    const corrIds = new Set<string>((spread?.correction?.nodes ?? []).map((n: Json) => n.article_id));
 
     // ---- Başlık ----
     const header = h("div", { class: "card event-head" },
@@ -366,11 +370,12 @@ async function renderEvent(id: string) {
     const news = h("div", { class: "card" }, h("h2", {}, `Haberler (${num(d.articles.length)})`),
       h("ul", { class: "news" }, d.articles.map((a: Json) => {
         const k = newsKind(a.member.novelty);
+        const denial = corrIds.has(a.article_id);
         return h("li", {},
           h("div", { class: "row" },
             h("strong", {}, sourceName(a.source.name)),
             h("span", { class: "small muted" }, [a.source.country ? countryName(a.source.country) : "Bilinmeyen kaynak", langName(a.lang), when(a.published_at ?? a.first_seen_at)].join(" · ")),
-            k ? badge(k.label, k.tone) : null),
+            denial ? badge("Yalanlama", "ok", "Metin bir yalanlama/düzeltme içeriyor") : k ? badge(k.label, k.tone) : null),
           orig(a.title_original, a.lang, "div", "orig news-title"),
           a.translation_tr ? h("div", { class: "small" }, "Türkçesi: ", a.translation_tr.title) : null,
           h("details", {}, h("summary", {}, "Metni göster"), orig(a.body_original, a.lang, "p", "small"),
@@ -521,6 +526,7 @@ function spreadSection(s: Json, _eventId: string): HTMLElement {
         const p = byId.get(a.parent), c = byId.get(a.article_id);
         return h("li", {}, h("strong", {}, `${sourceName(p?.source_name ?? "")} → ${sourceName(c?.source_name ?? "")}`), h("span", {}, text));
       }))) : h("p", { class: "muted small" }, "Yayılırken bilgide dikkat çeken bir değişiklik görülmedi."),
+    s.gap ? gapCard(s.gap, _eventId) : null,
     !can("analyze") ? null : h("details", { class: "tech" }, h("summary", {}, "Teknik ayrıntılar (analist için)"),
       h("p", { class: "meta" }, "Bağlar otomatik çıkarımdır, kalibre edilmemiştir; kanıtlanmış kopyalama değildir."),
       h("div", { class: "grid kpis" },
@@ -532,6 +538,25 @@ function spreadSection(s: Json, _eventId: string): HTMLElement {
       spreadChart(s),
       spreadTree(s),
       s.notes.map((n: string) => h("p", { class: "meta" }, "ℹ ", n))));
+}
+
+/** Düzeltme boşluğu (olay sayfası): yalanlama iddianın ulaştığı yerlere ulaştı mı? */
+function gapCard(g: Json, eventId: string): HTMLElement {
+  const fill = h("span", { class: "gap-fill" });
+  fill.style.width = `${Math.max(2, Math.round(g.coverage * 100))}%`;
+  return h("section", { class: "gap" },
+    h("h3", {}, "Düzeltme boşluğu"),
+    h("p", { class: "gap-line" }, gapLine(g)),
+    h("div", { class: "gap-bar", role: "img", "aria-label": `Yalanlama kapsaması ${pct(g.coverage)}` }, fill),
+    h("p", { class: "small muted" }, `Yalanlama, iddianın ulaştığı ülkelerin ${pct(g.coverage)} kadarına ulaştı.`,
+      g.first ? ` İlk yalanlama: ${countryName(g.first.cc)} — ${sourceName(g.first.source)}, ${when(g.first.time)}.` : ""),
+    g.gap_langs.length ? h("p", {}, "Yalanlamanın hiç yayımlanmadığı diller: ", h("strong", {}, g.gap_langs.map(langName).join(", "))) : null,
+    g.targets.length ? [h("h4", {}, "Açıklama gönderilmesi önerilen yerler"),
+      h("ol", { class: "gap-targets" }, g.targets.map((t: Json) => h("li", {},
+        h("strong", {}, countryName(t.cc)), ` — ${sourceName(t.source)} `, h("span", { class: "small muted" }, `(${langName(t.lang)})`),
+        h("ul", { class: "small" }, targetReasons(t).map((r) => h("li", {}, r))))))] : h("p", { class: "ok-text" }, "Yalanlama, iddianın ulaştığı tüm ülkelere ulaştı."),
+    g.after.length ? h("p", { class: "small warn-text" }, `⚠ İlk yalanlamadan sonra ${g.after.length} yayın iddiayı yaymaya devam etti: ${g.after.map((x: Json) => `${sourceName(x.source)} (${countryName(x.cc)})`).join(", ")}`) : null,
+    h("a", { class: "btn secondary", href: `#/atlas?olay=${encodeURIComponent(eventId)}` }, "Haritada izle"));
 }
 
 let teardown: (() => void) | null = null;
@@ -591,6 +616,7 @@ async function renderReport(q: URLSearchParams) {
 
     const imgSlot = (alt: string) => h("div", { class: "r-map" }, h("div", { class: "r-map-wait" }, "Harita hazırlanıyor…"), alt ? h("span", { hidden: true }, alt) : null);
     const slots = new Map<string, HTMLElement>();
+    const gapSlots = new Map<string, HTMLElement>();
     const overviewSlot = only ? null : imgSlot("Genel yayılım haritası");
 
     const eventSection = (e: Json) => {
@@ -599,6 +625,27 @@ async function renderReport(q: URLSearchParams) {
       const steps = [...e.links].sort((a: Json, b: Json) => a.time.localeCompare(b.time));
       const slot = imgSlot(e.title_tr);
       slots.set(e.event_id, slot);
+      const g = e.correction;
+      const gapSlot = g ? imgSlot(`${e.title_tr} düzeltme boşluğu`) : null;
+      if (gapSlot) gapSlots.set(e.event_id, gapSlot);
+      const gapFill = h("span", {});
+      if (g) gapFill.style.width = `${Math.max(2, Math.round(g.coverage * 100))}%`;
+      const gapBlock = g ? h("div", { class: "r-gap" },
+        h("h3", {}, "Düzeltme boşluğu"),
+        h("p", {}, h("strong", {}, gapLine(g)), ` (kapsama ${pct(g.coverage)})`),
+        h("div", { class: "r-gapbar" }, gapFill),
+        g.first ? h("p", {}, `İlk yalanlama: ${countryName(g.first.cc)} — ${sourceName(g.first.source)} (${when(g.first.time)}).`) : null,
+        g.gap_langs.length ? h("p", {}, "Yalanlamanın hiç yayımlanmadığı diller: ", h("strong", {}, g.gap_langs.map(langName).join(", ")), ".") : null,
+        gapSlot,
+        h("p", { class: "r-caption" }, "Yeşil: yalanlamanın ulaştığı ülkeler. Turuncu: iddianın ulaşıp yalanlamanın ulaşmadığı ülkeler."),
+        g.targets.length ? [h("h3", {}, "Açıklama gönderilmesi önerilen yerler"),
+          h("table", { class: "r-steps" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Öncelik"), h("th", {}, "Ülke"), h("th", {}, "Kaynak (dil)"), h("th", {}, "Neden"))),
+            h("tbody", {}, g.targets.map((t: Json, i: number) => h("tr", {},
+              h("td", {}, String(i + 1)), h("td", {}, countryName(t.cc)),
+              h("td", {}, sourceName(t.source), h("div", { class: "r-sub" }, langName(t.lang))),
+              h("td", {}, targetReasons(t).join(" "))))))] : h("p", {}, "Yalanlama, iddianın ulaştığı tüm ülkelere ulaştı."),
+        g.after.length ? h("p", { class: "r-callout" }, `İlk yalanlamadan sonra ${g.after.length} yayın iddiayı yaymaya devam etti: ${g.after.map((x: Json) => `${sourceName(x.source)} (${countryName(x.cc)})`).join(", ")}.`) : null) : null;
       return h("section", { class: "r-event" },
         h("h2", {}, e.title_tr || "Adlandırılmamış olay"),
         h("p", { class: "r-status" }, h("span", { class: `r-chip r-${stt.tone}` }, stt.label), " ", stt.hint),
@@ -607,7 +654,8 @@ async function renderReport(q: URLSearchParams) {
           e.first ? h("tr", {}, h("th", {}, "İlk çıktığı yer"), h("td", {}, `${countryName(e.first.cc)} — ${sourceName(e.first.source)} (${when(e.first.time)})`)) : null,
           h("tr", {}, h("th", {}, "Ulaştığı ülkeler"), h("td", {}, `${e.countries.length}: ${e.countries.map(countryName).join(", ")}`)),
           e.hours_span ? h("tr", {}, h("th", {}, "Süre"), h("td", {}, duration(e.hours_span))) : null,
-          h("tr", {}, h("th", {}, "Yayılırken değişiklik"), h("td", {}, visibleChanges(e) ? `${visibleChanges(e)} kez` : "Görülmedi")))),
+          h("tr", {}, h("th", {}, "Yayılırken değişiklik"), h("td", {}, visibleChanges(e) ? `${visibleChanges(e)} kez` : "Görülmedi")),
+          g ? h("tr", {}, h("th", {}, "Yalanlama"), h("td", {}, `${g.covered.length} / ${g.claim_countries.length} ülkeye ulaştı (${pct(g.coverage)})`)) : null)),
         slot,
         steps.length ? [h("h3", {}, "Nasıl yayıldı?"),
           h("table", { class: "r-steps" },
@@ -620,7 +668,8 @@ async function renderReport(q: URLSearchParams) {
                 h("td", {}, countryName(l.from_cc), h("div", { class: "r-sub" }, sourceName(a?.source ?? ""))),
                 h("td", {}, countryName(l.to_cc), h("div", { class: "r-sub" }, sourceName(b?.source ?? ""))),
                 h("td", {}, notes.length ? notes.join(" ") : null, weakLinkNote(l.kind) ? h("div", { class: "r-sub" }, weakLinkNote(l.kind)) : null, !notes.length && !weakLinkNote(l.kind) ? "—" : null));
-            })))] : null);
+            })))] : null,
+        gapBlock);
     };
 
     const report = h("article", { class: "report" },
@@ -639,7 +688,8 @@ async function renderReport(q: URLSearchParams) {
         h("h3", {}, "Öne çıkanlar"),
         h("ul", { class: "r-findings" }, featured.slice(0, 3).map((e) => {
           const n = visibleChanges(e);
-          return h("li", {}, h("strong", {}, e.title_tr), ` — ${status(e.momentum.label).label}. ${eventLine(e)}.${n ? ` Yayılırken ${n} kez değişti.` : ""}`);
+          const gp = e.correction && e.correction.gap.length ? ` Yalanlama iddianın ulaştığı ${e.correction.claim_countries.length} ülkeden yalnız ${e.correction.covered.length} tanesine ulaştı.` : "";
+          return h("li", {}, h("strong", {}, e.title_tr), ` — ${status(e.momentum.label).label}. ${eventLine(e)}.${n ? ` Yayılırken ${n} kez değişti.` : ""}${gp}`);
         })),
         overviewSlot,
         h("p", { class: "r-caption" }, "Haritada çizgiler haberin bir ülkeden diğerine aktarıldığını, kırmızı renk aktarılırken bilginin değiştiğini gösterir.")),
@@ -654,7 +704,8 @@ async function renderReport(q: URLSearchParams) {
         h("ul", {},
           h("li", {}, "“İlk çıktığı yer”, SİNYAL'in bu haberi gördüğü en erken yayındır; daha önce izlenmeyen bir kaynakta çıkmış olabilir."),
           h("li", {}, "Ülkeler arası çizgiler, haberin metnindeki atıflara ve benzerliğe göre otomatik çıkarılır; kesin kopyalama kanıtı değildir."),
-          h("li", {}, "“Yayılırken değişti” notları, bir yayının önceki yayından farklı bir rakam vermesini veya iddiayı kesin bilgi gibi aktarmasını gösterir.")),
+          h("li", {}, "“Yayılırken değişti” notları, bir yayının önceki yayından farklı bir rakam vermesini veya iddiayı kesin bilgi gibi aktarmasını gösterir."),
+          h("li", {}, "“Düzeltme boşluğu”, iddianın ulaştığı ama yalanlamanın ulaşmadığı ülke ve dilleri gösterir. Yalanlama haberleri metindeki yalanlama ifadelerinden otomatik tanınır; önerilen hedefler, iddiayı o ülkeye ilk getiren kaynaklardır.")),
         h("p", { class: "r-disclaimer" }, "Bu rapor SİNYAL tarafından otomatik hazırlanmıştır. Önemli kararlardan önce analist doğrulaması önerilir.")));
 
     const hint = h("p", { class: "no-print report-hint" }, "“PDF olarak indir”e bastığınızda açılan pencerede Hedef olarak “PDF olarak kaydet”i seçin.");
@@ -670,8 +721,9 @@ async function renderReport(q: URLSearchParams) {
         };
         put(overviewSlot, imgs.overview, "Genel yayılım haritası");
         for (const e of featured) put(slots.get(e.event_id), imgs.events[e.event_id], `${e.title_tr} yayılım haritası`);
+        for (const e of featured) put(gapSlots.get(e.event_id), imgs.gaps[e.event_id], `${e.title_tr} düzeltme boşluğu haritası`);
       } catch (e) {
-        for (const s of [overviewSlot, ...slots.values()]) s?.replaceChildren(h("div", { class: "r-map-wait" }, `Harita oluşturulamadı: ${(e as Error).message}`));
+        for (const s of [overviewSlot, ...slots.values(), ...gapSlots.values()]) s?.replaceChildren(h("div", { class: "r-map-wait" }, `Harita oluşturulamadı: ${(e as Error).message}`));
       }
       pdfBtn.disabled = false; pdfBtn.textContent = "PDF olarak indir";
     });

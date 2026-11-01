@@ -249,4 +249,28 @@ export const MOCK_ARTICLES: MockArticle[] = [
     body: "Doravya'nın Kestriya sınır kapısını kapattığı ve 40 kişiyi gözaltına aldığı ileri sürüldü. Haber ilk olarak Demo Grenzblog'da yer aldı; Doravya hükümeti iddiaları teyit etmedi.",
     expect: { event: "E5", novelty: "duplicate" },
   },
+  // --- E5 YALANLAMA zinciri (DÜZELTME BOŞLUĞU senaryosu) ---
+  // Doravya resmî olarak yalanlar; yalanlama yalnız İngiliz, Alman ve Türk basınına ulaşır. Arapça/Farsça/Rusça
+  // basın yalanlamayı hiç aktarmaz; Demo Khabar ve Demo Novosti yalanlamadan SONRA da iddiayı yaymaya devam eder.
+  {
+    key: "g1", source_id: "demo-en-wire", lang: "en", hoursAgo: 4,
+    url: "https://wire-en.example/world/doravia-denies-border-closure",
+    title: "Doravia denies closing border with Kestria",
+    body: "The government of Doravia denied reports that it had closed its border crossing with Kestria. A spokesperson for the Doravian interior ministry said the border remained open and that no one had been detained there.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "g2", source_id: "demo-de-zeitung", lang: "de", hoursAgo: 3,
+    url: "https://zeitung-de.example/ausland/dorawien-dementiert-grenzschliessung",
+    title: "Dorawien dementiert Schließung der Grenze zu Kestrien",
+    body: "Die Regierung von Dorawien hat Berichte über eine Schließung des Grenzübergangs zu Kestrien dementiert, wie Demo Wire meldet. Die Grenze sei geöffnet, Festnahmen habe es dort nicht gegeben.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "g3", source_id: "demo-tr-haber", lang: "tr", hoursAgo: 0.5,
+    url: "https://haber-tr.example/dunya/doravya-sinir-yalanlama",
+    title: "Doravya, Kestriya sınırının kapatıldığı haberlerini yalanladı",
+    body: "Doravya İçişleri Bakanlığı, Kestriya sınır kapısının kapatıldığı ve gözaltı yapıldığı yönündeki haberleri yalanladı. Bakanlık sınırın açık olduğunu bildirdi. Açıklamayı ilk olarak Demo Wire duyurdu.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
 ];

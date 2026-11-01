@@ -40,6 +40,27 @@ export function hedgePhrases(text: string, lang: string): string[] {
   return (HEDGES[lang] ?? []).filter((_, i) => k.includes(HEDGE_KEYS[lang]![i]!));
 }
 
+// Yalanlama/düzeltme belirteçleri (DÜZELTME BOŞLUĞU için). Kelime BAŞINDAN aranır (" " + anahtar): kısa Arapça
+// köklerin başka sözcüklerin içinde yakalanmasını önler (ör. "نفت" ↔ "انفتاح").
+const DENIALS: Record<string, string[]> = {
+  tr: ["yalanla", "gerçeği yansıtmadığı", "doğru olmadığı"],
+  en: ["denied", "denies", "denial", "dismissed reports", "false reports"],
+  ru: ["опроверг", "не соответствует действительности"],
+  ar: ["نفت", "نفى", "تنفي", "ينفي", "عار عن الصحة"],
+  fa: ["تکذیب"],
+  fr: ["dément", "démenti", "fausse information"],
+  de: ["dementier", "falschmeldung", "zurückgewiesen"],
+};
+const DENIAL_KEYS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(DENIALS).map(([l, ds]) => [l, ds.map((d) => " " + matchKey(d, l))]),
+);
+
+/** Metindeki yalanlama ifadeleri (sözlükteki özgün biçimiyle). Boş değilse haber bir yalanlama/düzeltmedir. */
+export function denialPhrases(text: string, lang: string): string[] {
+  const k = " " + matchKey(text, lang) + " ";
+  return (DENIALS[lang] ?? []).filter((_, i) => k.includes(DENIAL_KEYS[lang]![i]!));
+}
+
 export function isHedged(text: string, lang: string): string[] {
   const k = " " + matchKey(text, lang) + " ";
   return (HEDGE_KEYS[lang] ?? []).filter((h) => k.includes(h));
