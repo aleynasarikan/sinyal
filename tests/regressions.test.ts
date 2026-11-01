@@ -220,8 +220,8 @@ describe("Bulgu 6 — sayfalama", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBe(total);
     const ev = await (await app(new Request("http://localhost:8790/api/events?limit=3&offset=3", { headers: { cookie: c } }))).json();
-    expect(ev.items.length).toBe(1);
-    expect(ev.total).toBe(4);
+    expect(ev.items.length).toBe(2);
+    expect(ev.total).toBe(5);
   });
 });
 

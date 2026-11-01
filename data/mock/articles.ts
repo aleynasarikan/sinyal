@@ -29,6 +29,7 @@ export const MOCK_SOURCES: MockSource[] = [
   { source_id: "demo-fr-journal", name: "Demo Journal (FR)", domain: "journal-fr.example", country: "FR", default_lang: "fr" },
   { source_id: "demo-de-zeitung", name: "Demo Zeitung (DE)", domain: "zeitung-de.example", country: "DE", default_lang: "de" },
   { source_id: "demo-fa-khabar", name: "Demo Khabar (FA)", domain: "khabar-fa.example", country: "IR", default_lang: "fa" },
+  { source_id: "demo-de-grenzblog", name: "Demo Grenzblog (DE)", domain: "grenzblog-de.example", country: "DE", default_lang: "de" },
 ];
 
 export const MOCK_ARTICLES: MockArticle[] = [
@@ -185,5 +186,67 @@ export const MOCK_ARTICLES: MockArticle[] = [
     title: "گزارش‌ها از حمله سایبری به بانک مرکزی دوراویا حکایت دارد",
     body: "بر اساس گزارش‌های تأیید نشده، بانک مرکزی دوراویا هدف حمله سایبری قرار گرفته است.",
     expect: { event: "E4", novelty: "uncertain_date_or_source" },
+  },
+
+  // ===== E5: Sınır kapatma iddiası — YAYILIM senaryosu =====
+  // Küçük bir blogda teyitsiz doğan iddia; atıflarla dil değiştirerek yayılır. Yol boyunca:
+  //  • Demo Wire'da teyitsizlik ifadesi düşer (iddia kesin bilgiye dönüşür),
+  //  • Demo Akhbar'da 40 gözaltı 400'e çıkar, Demo Novosti'de rakam "сотни"ye (yüzlerce) belirsizleşir,
+  //  • Demo Repost, Demo Wire'ı birebir kopyalar.
+  {
+    key: "f1", source_id: "demo-de-grenzblog", lang: "de", hoursAgo: 9,
+    url: "https://grenzblog-de.example/2026/dorawien-grenze-geschlossen",
+    title: "Dorawien soll Grenze zu Kestrien geschlossen haben – angeblich 40 Festnahmen",
+    body: "Nach unbestätigten Berichten von Anwohnern hat Dorawien den Grenzübergang zu Kestrien geschlossen. Angeblich wurden 40 Menschen festgenommen. Eine offizielle Bestätigung gibt es nicht.",
+    expect: { event: "E5", novelty: "unverified_claim" },
+  },
+  {
+    key: "f2", source_id: "demo-de-zeitung", lang: "de", hoursAgo: 7.5,
+    url: "https://zeitung-de.example/ausland/dorawien-grenze-berichte",
+    title: "Berichte: Dorawien schließt Grenze zu Kestrien",
+    body: "Wie der Demo Grenzblog berichtet, soll Dorawien den Grenzübergang zu Kestrien geschlossen haben. Dabei seien angeblich 40 Menschen festgenommen worden. Die Regierung von Dorawien hat die Berichte bislang nicht kommentiert.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "f3", source_id: "demo-en-wire", lang: "en", hoursAgo: 5.9,
+    url: "https://wire-en.example/world/doravia-closes-border-kestria",
+    title: "Doravia closes border with Kestria, 40 detained",
+    body: "Doravia has closed its border crossing with Kestria and detained 40 people, Demo Zeitung reported. Doravian officials did not respond to requests for comment.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "f4", source_id: "demo-en-repost", lang: "en", hoursAgo: 5.6,
+    url: "https://repost-en.example/2026/doravia-closes-border",
+    title: "Doravia closes border with Kestria, 40 detained",
+    body: "Doravia has closed its border crossing with Kestria and detained 40 people, Demo Zeitung reported. Doravian officials did not respond to requests for comment.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "f5", source_id: "demo-ar-akhbar", lang: "ar", hoursAgo: 4.5,
+    url: "https://akhbar-ar.example/news/doravia-hudud-400",
+    title: "دورافيا تغلق الحدود مع كيستريا واعتقال 400 شخص",
+    body: "أغلقت دورافيا الحدود مع كيستريا واعتقلت 400 شخص، بحسب ما أفادت Demo Wire. ولم يصدر تعليق رسمي من دورافيا.",
+    expect: { event: "E5", novelty: "significant_update" },
+  },
+  {
+    key: "f6", source_id: "demo-fa-khabar", lang: "fa", hoursAgo: 3.5,
+    url: "https://khabar-fa.example/news/doravia-marz-400",
+    title: "دوراویا مرز با کستریا را بست؛ ۴۰۰ نفر بازداشت شدند",
+    body: "به گزارش Demo Akhbar، دوراویا مرز خود با کستریا را بست و ۴۰۰ نفر را بازداشت کرد.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "f7", source_id: "demo-ru-novosti", lang: "ru", hoursAgo: 2.5,
+    url: "https://novosti-ru.example/mir/doraviya-zakryla-granitsu",
+    title: "Доравия закрыла границу с Кестрией: задержаны сотни человек",
+    body: "Власти Доравии закрыли границу с Кестрией, сообщает Demo Khabar. По данным издания, задержаны сотни человек.",
+    expect: { event: "E5", novelty: "duplicate" },
+  },
+  {
+    key: "f8", source_id: "demo-tr-haber", lang: "tr", hoursAgo: 1,
+    url: "https://haber-tr.example/dunya/doravya-sinir-iddiasi",
+    title: "Doravya'nın Kestriya sınırını kapattığı iddia edildi",
+    body: "Doravya'nın Kestriya sınır kapısını kapattığı ve 40 kişiyi gözaltına aldığı ileri sürüldü. Haber ilk olarak Demo Grenzblog'da yer aldı; Doravya hükümeti iddiaları teyit etmedi.",
+    expect: { event: "E5", novelty: "duplicate" },
   },
 ];

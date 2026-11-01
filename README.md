@@ -3,6 +3,10 @@
 Bağımsız, çok dilli medya istihbaratı ve olay analizi platformu (MVP).
 Farklı dillerdeki haberleri SİNYAL'e ait olaylar etrafında birleştirir, yeni gelişmeleri sınıflar,
 her analiz iddiasını kaynak haberlere bağlar ve kaynakta dayanağı olmayanı "doğrulanamadı" olarak gösterir.
+**Yayılım** katmanı bir iddianın yayıncılar ve diller arasında kimden kime geçtiğini, yolda nasıl değiştiğini
+(teyitsizlik ifadesinin düşmesi, sayının şişmesi) ve yayılmanın hızlanıp hızlanmadığını gösterir; **Yayılım Atlası** bunu
+ülkeler arası animasyonlu harita olarak gösterir (dış harita sunucusu kullanmadan); sade dilde hazırlanan rapor PDF olarak
+indirilebilir (`docs/MIMARI.md`).
 
 > UMİ'den ayrı bir uygulamadır: kendi deposu, API'si, arayüzü ve ClickHouse veritabanı vardır.
 > UMİ'nin koduna, arayüzüne veya veritabanına yazmaz. Varsayılan olarak **kurgusal demo verisi** ve **mock model** ile çalışır.
@@ -13,7 +17,7 @@ Gereksinim: Bun ≥ 1.2.
 
 ```bash
 bun install
-bun run check                 # typecheck + 110 test
+bun run check                 # typecheck + 138 test
 SINYAL_COOKIE_SECURE=0 SINYAL_DEMO_USERS=1 bun run start
 # → http://127.0.0.1:8790
 ```
@@ -45,6 +49,7 @@ otomatik çalışır; elle: `bun run migrate`.
 | `bun test` | Otomatik testler |
 | `bun run typecheck` | TypeScript denetimi |
 | `bun run migrate` | ClickHouse migration'ları |
+| `bun scripts/build_geo.ts` | Atlas ülke sınırlarını yeniden üretir (`data/geo/`) |
 | `bun run eval --synthetic` | Değerlendirme hattını sentetik setle çalıştırır (kalite ölçümü değildir) |
 | `bun run eval --gold g.jsonl --system s.jsonl` | Analist altın setiyle ölçüm |
 

@@ -34,6 +34,12 @@ const HEDGE_KEYS: Record<string, string[]> = Object.fromEntries(
   Object.entries(HEDGES).map(([l, hs]) => [l, hs.map((h) => matchKey(h, l))]),
 );
 
+/** isHedged ile aynı denetim; eşleştirme anahtarı yerine sözlükteki ÖZGÜN ifadeyi döndürür (gösterim için). */
+export function hedgePhrases(text: string, lang: string): string[] {
+  const k = " " + matchKey(text, lang) + " ";
+  return (HEDGES[lang] ?? []).filter((_, i) => k.includes(HEDGE_KEYS[lang]![i]!));
+}
+
 export function isHedged(text: string, lang: string): string[] {
   const k = " " + matchKey(text, lang) + " ";
   return (HEDGE_KEYS[lang] ?? []).filter((h) => k.includes(h));

@@ -17,7 +17,7 @@ export const DEMO_GAZETTEER: GazetteerEntry[] = [
   {
     id: "place:kestria", type: "place", label_tr: "Kestriya", matchable: true,
     aliases: {
-      tr: ["Kestriya"], en: ["Kestria", "Kestrian"], ar: ["كيستريا"], ru: ["Кестрия", "Кестрии", "Кестрию"],
+      tr: ["Kestriya"], en: ["Kestria", "Kestrian"], ar: ["كيستريا"], ru: ["Кестрия", "Кестрии", "Кестрию", "Кестрией"],
       fr: ["Kestrie", "kestrien"], de: ["Kestrien", "kestrische", "kestrischen"], fa: ["کستریا"],
     },
   },
@@ -79,6 +79,13 @@ export const DEMO_GAZETTEER: GazetteerEntry[] = [
   {
     id: "concept:cyberattack", type: "keyword", label_tr: "Siber saldırı", matchable: true,
     aliases: { tr: ["siber saldırı"], en: ["cyberattack", "cyber attack"], ar: ["هجوم إلكتروني"], ru: ["кибератаке", "кибератака"], fr: ["cyberattaque"], de: ["Cyberangriff"], fa: ["حمله سایبری"] },
+  },
+  {
+    id: "concept:border_closure", type: "keyword", label_tr: "Sınır kapatma", matchable: true,
+    aliases: {
+      tr: ["sınır"], en: ["border"], ar: ["الحدود"], ru: ["граница", "границу", "границы"],
+      fr: ["frontière"], de: ["Grenze", "Grenzübergang"], fa: ["مرز"],
+    },
   },
   {
     id: "concept:casualties", type: "keyword", label_tr: "Can kaybı", matchable: false,

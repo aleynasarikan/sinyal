@@ -1,4 +1,4 @@
-# SİNYAL uygulama imajı. Runtime bağımlılığı yok; yalnız Bun.
+# SİNYAL uygulama imajı. Tek runtime bağımlılığı maplibre-gl (Atlas; tarayıcıya aynı kökenden servis edilir).
 FROM oven/bun:1.2.23-alpine AS base
 WORKDIR /app
 COPY package.json bun.lock ./

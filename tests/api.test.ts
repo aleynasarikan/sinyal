@@ -131,12 +131,12 @@ describe("Arama ve filtreler", () => {
   test("Dil, varlık, sınıf ve metin filtreleri", async () => {
     const c = await loginAs("izleyici@t.local");
     const fa = await (await get("/api/articles?lang=fa", c)).json();
-    expect(fa.total).toBe(3);
+    expect(fa.total).toBe(4);
     expect(fa.items.every((a: { rtl: boolean }) => a.rtl)).toBe(true);
     const ent = await (await get("/api/articles?entity=person:sofia_brandt", c)).json();
     expect(ent.total).toBe(6);
     const dup = await (await get("/api/articles?novelty=unverified_claim", c)).json();
-    expect(dup.total).toBe(2);
+    expect(dup.total).toBe(3); // a9, d1, f1
     const q = await (await get("/api/articles?q=" + encodeURIComponent("نورفيك"), c)).json();
     expect(q.total).toBe(1);
     const ev = await (await get("/api/events?entity=concept:wildfire", c)).json();
@@ -176,5 +176,45 @@ describe("Veri erişim adaptörleri", () => {
     const r = await new MockDataProvider(now).fetchBatch({ limit: 100 });
     expect(r.ok && r.demo).toBe(true);
     if (r.ok) expect(new Set(r.articles.map((a) => a.lang_declared))).toEqual(new Set(["tr", "en", "ar", "ru", "fr", "de", "fa"]));
+  });
+});
+
+describe("Yayılım API", () => {
+  test("Giriş gerektirir; olmayan olay 404", async () => {
+    expect((await get("/api/spread")).status).toBe(401);
+    expect((await get(`/api/events/${eventId}/spread`)).status).toBe(401);
+    const c = await loginAs("izleyici@t.local");
+    expect((await get("/api/events/evt_olmayan/spread", c)).status).toBe(404);
+  });
+  test("Olay yayılımı ve radar: mutasyonlu, hızlanan olay en üstte", async () => {
+    const c = await loginAs("izleyici@t.local");
+    const s = await (await get(`/api/events/${eventId}/spread`, c)).json();
+    expect(s.version).toBe("yayilim-v1");
+    expect(s.stats.placed).toBe(10);
+    const radar = await (await get("/api/spread?window=24", c)).json();
+    expect(radar.window_hours).toBe(24);
+    const top = radar.items[0];
+    expect(top.title_tr).toContain("Sınır kapatma");
+    expect(top.alerts.high).toBe(2);
+    expect(top.momentum.label).toBe("accelerating");
+    expect(top.first_seen.hedged).toBe(true);
+  });
+});
+
+describe("Atlas API", () => {
+  test("Giriş gerektirir; mutasyonlu olay önce, demo işaretli", async () => {
+    expect((await get("/api/atlas")).status).toBe(401);
+    const c = await loginAs("izleyici@t.local");
+    const d = await (await get("/api/atlas?window=72", c)).json();
+    expect(d.demo).toBe(true);
+    expect(d.events[0].title_tr).toContain("Sınır kapatma");
+    expect(d.countries.DE.first_seen).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(d)).not.toContain("body_original"); // atlas tam metin taşımaz
+  });
+  test("Statik varlıklar aynı kökenden: worker, harita stili, sınırlar", async () => {
+    const { buildWebAssets } = await import("../src/web/build.ts");
+    const assets = await buildWebAssets();
+    for (const p of ["/maplibre-gl-worker.mjs", "/maplibre-gl.css", "/geo/countries.json", "/geo/country_points.json", "/app.js"]) expect(assets.has(p)).toBe(true);
+    expect(assets.get("/app.js")![0].length).toBeLessThan(200_000); // maplibre ana pakete girmez, ayrı parçada
   });
 });

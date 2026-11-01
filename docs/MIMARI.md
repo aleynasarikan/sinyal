@@ -20,10 +20,12 @@ pipeline/ingest ──► entities (gazetteer) ──► match (olay) ──► 
 | `src/pipeline` | Alım, varlık çıkarımı, olay eşleştirme, yenilik sınıflandırması |
 | `src/llm` | Sağlayıcı arayüzü, istem, şema doğrulama, sınırlı yeniden deneme |
 | `src/claims` | İddia–kaynak denetimi, kaynaklar arası sayısal farklılık |
+| `src/spread` | Yayılım: olası aktarım zinciri, yol boyunca mutasyonlar, R ve ivme (salt okuma, model yok) |
 | `src/store` | Repo arayüzü, bellek ve ClickHouse uygulamaları, migration |
 | `src/auth` | Argon2id parolalar, HttpOnly oturum, roller, hız sınırı |
 | `src/api` | REST uçları, güvenlik başlıkları, CSRF (Origin) denetimi |
-| `src/web` | Arayüz (bağımsız TS; framework/CDN yok) |
+| `src/web` | Arayüz (bağımsız TS; framework/CDN yok). Atlas: maplibre-gl, ayrı parça olarak aynı kökenden |
+| `data/geo` | Atlas ülke sınırları + çizim noktaları (Natural Earth, kamu malı; `scripts/build_geo.ts` üretir) |
 | `src/eval` | B-cubed vb. değerlendirme |
 
 ## Veri modeli ve ClickHouse kararları
@@ -92,6 +94,69 @@ Karar haber sayısına dayanmaz.
 - Kaynaklar arası sayısal farklılık (`claims/conflicts.ts`): can kaybı gibi slotlarda farklı değerler gizlenmez;
   ≤4 saat arayla farklı değer → "çelişki", daha uzun aralık → "zaman içinde değişim".
 - Analist incelemesi (onay/düzeltme/red/not) yalnız-ekleme olarak saklanır ve denetim kaydına yazılır.
+
+## Yayılım (`src/spread`, `yayilim-v1`)
+
+Diğer katmanlar "ne oldu, söylenen kaynakta var mı?" sorusunu yanıtlar; Yayılım "bilgi kimden kime geçti, yolda nasıl
+değişti, yayılma hızlanıyor mu?" sorusunu. Deterministiktir, model çağırmaz, yeni tablo yazmaz (olay üyeleri, haberler ve
+varlıklardan istek anında hesaplanır).
+
+1. **Yerleştirme**: yalnız `date_quality = exact` olan haberler zincire girer; diğerleri "zincire yerleştirilmedi" diye listelenir.
+2. **Olası kaynak**: her haber için kendisinden önce yayımlanmış (≤96 sa) adaylar puanlanır —
+   atıf (metin adayın yayıncı adını anıyor, +0.50), kopya (aynı dilde başlık ve gövde ≥0.8, +0.60),
+   ortak olgu (kanonik varlık + olgu sayısı Jaccard ×0.30), aynı dilde gövde benzerliği (×0.20). Eşik 0.20.
+   Yalnız ortak olguya dayanan kenar "zayıf bağ"dır; Jaccard < 0.5 ise kurulmaz ve eşitlikte olguyu **ilk** getiren
+   aday seçilir (aksi halde ajans haberleri sahte derin zincir oluşturur). Kaynağı bulunamayan haber bağımsız giriştir (kök).
+3. **Mutasyon** (kenar boyunca): teyitsizlik ifadesinin düşmesi (yüksek) / eklenmesi (düşük); tek sayının değişmesi
+   (oran ≥2 veya ≤0.5 ise yüksek, aksi orta); kaynakta olmayan sayı eklenmesi (orta); sayının aktarılmaması (düşük).
+   Zayıf bağda aktarım kanıtlanmadığı için teyitsizlik değişimi mutasyon sayılmaz, sayı farkları düşük önemle gösterilir.
+4. **Ölçüler**: nesil derinliği; R = yayın başına ortalama aktarım (son 3 saatte yayımlananlar sağdan sansür nedeniyle
+   dışlanır); erişim eğrisi (birikimli haber/dil/ülke); ivme = son 6 sa ile önceki 6 sa karşılaştırması
+   ("hızlanıyor" için en az 3 haber).
+
+**Sınırlar**: "İlk görülen" SİNYAL'in gördüğü en erken haberdir, gerçek köken izlenmeyen bir yayın olabilir. Atıf tespiti
+yayıncı adının metinde geçmesine dayanır; takma ad/kısaltma ("AFP" ↔ "Agence France-Presse") için yayıncı takma ad
+listesi gerekir. Bağlar ve R sezgiseldir, altın setle (analist işaretli gerçek aktarım zincirleri) ayarlanmalıdır.
+
+API: `GET /api/events/:id/spread` (olay ayrıntısı), `GET /api/spread?window=24|72` (Yayılım Radarı: yüksek önemli
+mutasyonu olan, sonra hızlanan olaylar önce).
+
+## Yayılım Atlası (`src/spread/atlas.ts`, `src/web/atlas.ts`)
+
+Yayılımı ülke düzeyine indirger: genel görünümde ülke dolgusu (penceredeki haber yoğunluğu), olayların ilk görüldüğü ülkeler
+ve tüm olayların ülkeler arası bağlantıları; bir olay seçilince bağlantılar zaman kaydırıcısıyla oynatılır (mutasyonlu aktarım
+kırmızı). Yan paneldeki adım listesi haritanın metin karşılığıdır. `GET /api/atlas?window=24|72` koordinat ve tam metin
+taşımaz; ülke kodu → nokta eşlemesi istemcidedir. Yayıncı ülkesi bilinmeyen haber haritaya konmaz (`unmapped`).
+
+**Dış istek yok.** maplibre-gl npm paketinden derlenir (CDN değil) ve yalnız Atlas açılınca ayrı parça olarak yüklenir; worker
+`/maplibre-gl-worker.mjs` olarak aynı kökenden gelir (CSP `script-src 'self'` değişmedi; blob/eval gerekmez). Harita karosu,
+stil ve font sunucusu kullanılmaz: zemin, depoya işlenmiş ülke sınırlarıdır (1:110m, ~165 KB); etiketler maplibre yazı
+katmanı yerine HTML işaretçileridir (glyph sunucusu gerekmez). Kaybedilen: sokak/şehir/arazi ayrıntısı.
+
+**Coğrafi veri notları:** 180° hattını geçen poligonlar (Rusya, Fiji) bölünür; Antarktika çıkarılmıştır. Sınırlar Natural
+Earth'ün fiili sınırlarıdır; tartışmalı bölgelerin (ör. Kıbrıs — kaynakta "N. Cyprus" ayrı ve ISO kodsuz) gösterimi
+**kurumsal karar** gerektirir ve henüz verilmemiştir. Kosova için kullanıcı-atamalı `XK` kodu kullanılır.
+
+## Sade arayüz ve rapor (`src/web/plain.ts`, `#/atlas`, `#/rapor`)
+
+**Menü:** herkes için Özet, Olaylar, Yayılım, Haber Ara. Rol bazlı "Yönetim" grubu: İddia Denetimi (analist, yönetici),
+Sistem Durumu ve Kullanıcılar (yalnız yönetici). Gizleme yalnız arayüz düzeyindedir; yetki API'de ayrıca denetlenir.
+Teknik bilgiler (eşleşme skoru, sınıf, tarih kalitesi, dil güveni, olay kimliği, özgün yazımlar) olay sayfasında yalnız
+analist/yöneticiye görünen "Teknik ayrıntılar" bölümündedir. Özet sayfası teknik sayaçlar yerine dört anlaşılır sayı ve
+"Dikkat gerektirenler" listesi gösterir; arama sayfaları tek kutu + "Daha fazla filtre" düzenindedir. Eski Radar bağlantısı
+Yayılım sayfasına yönlenir. Teknik olmayan okur için: ülke kodları
+yerine Türkçe ülke adları (`data/geo/country_names_tr.json`), durum için tek etiket ("Hızla yayılıyor", "Durdu"), değişiklikler
+için düz cümle ("Rakam değişti: 40 → 400"). R, nesil, atıf/kopya gibi terimler ekranda gösterilmez; olay sayfasında
+"Teknik ayrıntılar (analist için)" altında katlıdır. Yalnız ortak bilgilere dayanan bağlantı "Olası bağlantı" diye işaretlenir.
+Küçük farklar (sayının aktarılmaması, ihtiyat ifadesi eklenmesi) okura gösterilmez. Türkçe ek uyumu hatalarından kaçınmak için
+cümle yerine "etiket: değer" biçimi kullanılır.
+
+**Rapor**: `#/rapor` (Durum Raporu: pencere geneli; Özet ve Yayılım sayfalarından) veya `#/rapor?olay=ID` (tek olay). Özet sayılar, ana bulgular, genel harita, olay başına
+bilgi tablosu + harita + "Nasıl yayıldı?" tablosu ve "Bu rapor nasıl okunur?" bölümü. Harita görüntüleri ekran dışı bir
+maplibre haritasında açık temayla çizilip PNG olarak alınır (noktalar/etiketler 2B tuvale çizilir). **PDF**: "PDF olarak indir"
+tarayıcının yazdırma penceresini açar (Hedef: PDF olarak kaydet); A4 yazdırma stili, her olay yeni sayfada, dosya adı
+`SINYAL-Yayilim-Raporu-YYYY-AA-GG`. Sunucuda PDF üretilmez: Arapça/Farsça şekillendirme ve Türkçe karakterler için yazı tipi
+gömme ek bağımlılık ister; tarayıcı bunları zaten doğru çizer.
 
 ## Güven puanları hakkında
 

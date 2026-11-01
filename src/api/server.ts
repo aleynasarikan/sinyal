@@ -14,6 +14,9 @@ import { metrics, percentile } from "../metrics.ts";
 import type { Gazetteer } from "../pipeline/entities.ts";
 import { runIngestion } from "../pipeline/ingest.ts";
 import type { DataProvider } from "../providers/types.ts";
+import { atlasEvent, countrySummary } from "../spread/atlas.ts";
+import { eventSpread } from "../spread/load.ts";
+import { SPREAD_VERSION } from "../spread/spread.ts";
 import type { Repo } from "../store/repo.ts";
 import {
   HttpError, SECURITY_HEADERS, SESSION_COOKIE, clientIp, dateRangeParam, intParam, json, readCookie, readJson, sessionCookie, strParam,
@@ -220,6 +223,50 @@ export function createApp(d: AppDeps) {
     }, key);
     audit(c, "analyze_event", id, res.run.status === "ok", { run_id: res.run.run_id, provider: res.run.provider, mock: res.run.mock });
     return json({ ok: res.run.status === "ok", run: res.run, error: res.run.status === "ok" ? undefined : "Model analizi başarısız oldu" }, res.run.status === "ok" ? 200 : 502);
+  });
+
+  // ---------- Yayılım ----------
+  on("GET", "/api/events/:id/spread", "read", async (c) => {
+    const id = c.params[0]!;
+    if (!(await repo.getEvent(id))) throw new HttpError(404, "Olay bulunamadı");
+    return json(await eventSpread(repo, id, clock()));
+  });
+
+  /** Penceredeki olaylar + yayılımları (radar ve atlas ortak kullanır). */
+  const windowSpreads = async (c: Ctx) => {
+    const hours = c.url.searchParams.get("window") === "24" ? 24 : 72;
+    const since = new Date(clock() - hours * 3_600_000).toISOString();
+    const evs = await repo.listEvents({ since, limit: 100, offset: 0 });
+    const spreads = await Promise.all(evs.items.map(async (e) => ({ e, s: await eventSpread(repo, e.event_id, clock()) })));
+    return { hours, spreads, demo: (await d.provider.status()).demo };
+  };
+  const M_RANK: Record<string, number> = { accelerating: 0, steady: 1, slowing: 2, dormant: 3 };
+
+  // Radar: penceredeki olayların yayılım özeti — önce yüksek önemli mutasyonu olan, sonra hızlanan olaylar.
+  on("GET", "/api/spread", "read", async (c) => {
+    const { hours, spreads, demo } = await windowSpreads(c);
+    const sources = await repo.listSources();
+    const srcName = new Map(sources.map((s) => [s.source_id, s.name]));
+    const items = spreads.map(({ e, s }) => {
+      const first = s.nodes.find((n) => n.article_id === s.first_seen);
+      const count = (sev: string) => s.alerts.filter((a) => a.severity === sev).length;
+      return {
+        event_id: e.event_id, title_tr: e.title_tr,
+        first_seen: first ? { article_id: first.article_id, source: srcName.get(first.source_id) ?? first.source_id, lang: first.lang, time: first.time, hedged: first.hedges.length > 0 } : null,
+        stats: s.stats, momentum: s.momentum,
+        alerts: { high: count("high"), medium: count("medium"), low: count("low"), top: s.alerts.slice(0, 3) },
+      };
+    });
+    items.sort((a, b) => b.alerts.high - a.alerts.high || M_RANK[a.momentum.label]! - M_RANK[b.momentum.label]! || (b.stats.r_estimate ?? 0) - (a.stats.r_estimate ?? 0));
+    return json({ demo, window_hours: hours, version: SPREAD_VERSION, items });
+  });
+
+  // Atlas: yayılımın ülke düzeyindeki görünümü (genel ülke özeti + olay başına ülkeler arası bağlantılar).
+  on("GET", "/api/atlas", "read", async (c) => {
+    const { hours, spreads, demo } = await windowSpreads(c);
+    const events = spreads.map(({ e, s }) => atlasEvent(e, s)).filter((e) => e.nodes.length > 0);
+    events.sort((a, b) => b.alerts.high - a.alerts.high || M_RANK[a.momentum.label]! - M_RANK[b.momentum.label]! || (b.r_estimate ?? 0) - (a.r_estimate ?? 0));
+    return json({ demo, window_hours: hours, version: SPREAD_VERSION, countries: countrySummary(events), events });
   });
 
   // ---------- Haberler ----------
